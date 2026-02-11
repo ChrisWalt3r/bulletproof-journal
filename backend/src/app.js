@@ -32,9 +32,16 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Public Routes
+app.get('/', (req, res) => {
+  res.status(200).json({
+    message: '🚀 Bulletproof Journal API is running!',
+    docs: 'Connect via mobile app or check /api/health'
+  });
+});
+
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'ok', 
+  res.status(200).json({
+    status: 'ok',
     timestamp: new Date(),
     environment: process.env.NODE_ENV || 'development',
     uptime: process.uptime()

@@ -4,8 +4,8 @@ const USE_PRODUCTION = true;
 // Local development (your machine's WiFi IP)
 const LOCAL_API_URL = 'http://10.66.43.129:3000/api';
 
-// Production (AWS EC2 — update this after launching your instance)
-const PRODUCTION_API_URL = 'https://YOUR_EC2_PUBLIC_IP:3000/api'; // <-- Replace after AWS setup
+// Production (Render Cloud)
+const PRODUCTION_API_URL = 'https://bulletproof-journal.onrender.com/api';
 
 export const API_URL = USE_PRODUCTION ? PRODUCTION_API_URL : LOCAL_API_URL;
 export const SUPABASE_URL = 'https://pjiishvyrepvltrklyjw.supabase.co';
