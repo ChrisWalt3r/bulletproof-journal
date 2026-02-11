@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "@react-navigation/stack": "^7.4.8",
+    "expo-image-picker": "^17.0.8",
+    "react-dom": "^19.1.0",
+    "react-native-gesture-handler": "^2.28.0",
+    "react-native-web": "^0.21.1"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "include": [
+    "App.js",
+    "index.js",
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "**/node_modules/*",
+    "android",
+    "ios"
+  ]
+}
