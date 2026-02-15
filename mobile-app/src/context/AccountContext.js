@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { accountsAPI, journalAPI } from '../services/api';
+import { useAuth } from './AuthContext';
 
 const AccountContext = createContext();
 
@@ -13,14 +14,22 @@ export const useAccount = () => {
 };
 
 export const AccountProvider = ({ children }) => {
+  const { user } = useAuth();
   const [currentAccount, setCurrentAccount] = useState(null);
   const [accounts, setAccounts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load saved account from AsyncStorage on app start
+  // Only fetch accounts when a user is logged in
   useEffect(() => {
-    initializeAccounts();
-  }, []);
+    if (user) {
+      initializeAccounts();
+    } else {
+      // Reset state when logged out
+      setAccounts([]);
+      setCurrentAccount(null);
+      setIsLoading(false);
+    }
+  }, [user]);
 
   const initializeAccounts = async () => {
     try {

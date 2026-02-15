@@ -8,6 +8,9 @@ import {
   TextInput,
   Alert,
   Modal,
+  StatusBar,
+  Dimensions,
+  FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,7 +24,11 @@ import {
   updateCriterionText,
   toggleCriterionChecked,
   deleteCriterion,
+  resetPlanCriteria,
 } from '../database/service';
+
+
+const { width } = Dimensions.get('window');
 
 const CriteriaScreen = () => {
   const [plans, setPlans] = useState([]);
@@ -32,7 +39,7 @@ const CriteriaScreen = () => {
   const [newCriterionText, setNewCriterionText] = useState('');
   const [editingCriterionId, setEditingCriterionId] = useState(null);
   const [editingCriterionText, setEditingCriterionText] = useState('');
-  
+
   // Tooltip state
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [tooltipContent, setTooltipContent] = useState('');
@@ -61,24 +68,24 @@ const CriteriaScreen = () => {
       content: "What are the action steps you are going to put in place to ensure you move away from outcome-based expectations to process-based expectations?"
     }
   };
-  
+
   // Trading Mindset entries
   const [mindsetEntries, setMindsetEntries] = useState([]);
 
   const mindsetPhases = [
-    'Waiting for a trade',
-    'Just about to take a trade', 
-    'Entered a trade',
-    'Moving my stop loss',
-    'Moving my take profit'
+    'Waiting',
+    'Pre-Trade',
+    'In Trade',
+    'Stop Loss',
+    'Take Profit'
   ];
 
   const emotionOptions = [
-    { value: 'very-positive', label: '😊 Very Positive', score: '+2' },
-    { value: 'positive', label: '🙂 Positive', score: '+1' },
-    { value: 'neutral', label: '😐 Neutral', score: '0' },
-    { value: 'negative', label: '😟 Negative', score: '-1' },
-    { value: 'very-negative', label: '😤 Very Negative', score: '-2' },
+    { value: 'very-positive', label: '🤩 Great', score: '+2', color: '#00C851' },
+    { value: 'positive', label: '🙂 Good', score: '+1', color: '#007E33' },
+    { value: 'neutral', label: '😐 Okay', score: '0', color: '#FFbb33' },
+    { value: 'negative', label: '😟 Bad', score: '-1', color: '#ff4444' },
+    { value: 'very-negative', label: '😫 Awful', score: '-2', color: '#CC0000' },
   ];
 
   // ---------- Trading Plans & Criteria Logic ----------
@@ -292,10 +299,83 @@ const CriteriaScreen = () => {
     }
   };
 
+  const handleResetCriteria = () => {
+    Alert.alert(
+      'Reset Checklist',
+      'Are you sure you want to uncheck all rules for this plan?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const updatedCriteria = await resetPlanCriteria(activePlanId);
+              setCriteriaByPlan(prev => ({
+                ...prev,
+                [activePlanId]: updatedCriteria
+              }));
+            } catch (error) {
+              console.error('Error resetting criteria:', error);
+              Alert.alert('Error', 'Failed to reset checklist.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+
+
+  const RenderCriteriaItem = ({ item }) => {
+    const isChecked = item.checked;
+
+    return (
+      <View style={[styles.criterionCard, { marginHorizontal: 16 }]}>
+        <TouchableOpacity
+          style={[styles.checkbox, isChecked && styles.checkboxChecked]}
+          onPress={() => handleToggleCriterion(item.id, isChecked)}
+        >
+          {isChecked && <Ionicons name="checkmark" size={16} color="#fff" />}
+        </TouchableOpacity>
+
+        <View style={styles.criterionContent}>
+          {editingCriterionId === item.id ? (
+            <View style={styles.editContainer}>
+              <TextInput
+                style={styles.editInput}
+                value={editingCriterionText}
+                onChangeText={setEditingCriterionText}
+                autoFocus
+                onBlur={handleSaveCriterionEdit}
+                onSubmitEditing={handleSaveCriterionEdit}
+              />
+            </View>
+          ) : (
+            <TouchableOpacity
+              onPress={() => startEditingCriterion(item)}
+            >
+              <Text style={[styles.criterionText, isChecked && styles.criterionTextChecked]}>
+                {item.text}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => handleDeleteCriterion(item.id)}
+        >
+          <Ionicons name="close-circle-outline" size={20} color="#ff6b6b" />
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   const addMindsetEntry = () => {
     const newEntry = {
       id: Date.now(),
-      phase: 'Waiting for a trade',
+      phase: 'Waiting',
       beforeTrade: {
         expectations: '',
         groundExpectations: false,
@@ -315,12 +395,12 @@ const CriteriaScreen = () => {
       entries.map(entry =>
         entry.id === id
           ? {
-              ...entry,
-              [field]: {
-                ...entry[field],
-                [subfield]: value
-              }
+            ...entry,
+            [field]: {
+              ...entry[field],
+              [subfield]: value
             }
+          }
           : entry
       )
     );
@@ -367,481 +447,350 @@ const CriteriaScreen = () => {
 
   // Tooltip Label Component
   const TooltipLabel = ({ text, tooltipKey }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.tooltipLabelContainer}
       onPress={() => showTooltip(tooltipKey)}
       activeOpacity={0.7}
     >
       <Text style={styles.fieldLabel}>{text}</Text>
-      <Ionicons name="information-circle-outline" size={16} color="#667eea" style={styles.tooltipIcon} />
+      <Ionicons name="help-circle" size={16} color="#667eea" style={styles.tooltipIcon} />
     </TouchableOpacity>
   );
 
-  return (
-    <View style={styles.container}>
-      {/* Header with Gradient */}
+  const renderHeader = () => (
+    <View>
       <LinearGradient
         colors={['#667eea', '#764ba2']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
         style={styles.header}
       >
-        <Text style={styles.title}>Trading Criteria</Text>
+        <Text style={styles.title}>Review & Criteria</Text>
         <Text style={styles.subtitle}>
-          Key confirmations & mindset tool
+          Master your edge and mindset
         </Text>
       </LinearGradient>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Trading Plans Tabs & Controls */}
-        <View style={styles.plansHeaderContainer}>
-          <Text style={styles.sectionTitle}>Your Plans</Text>
+      <View style={{ paddingHorizontal: 16, paddingTop: 24 }}>
+        {/* Trading Plans Section */}
+        <View style={styles.sectionHeaderContainer}>
+          <Text style={styles.sectionTitle}>TRADING PLANS</Text>
         </View>
-        
-        <View style={styles.tabContainer}>
+
+        {/* Modern Plan Tabs */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.tabsScroll}
+          contentContainerStyle={styles.tabsContainer}
+        >
           {plans.map(plan => (
             <TouchableOpacity
               key={plan.id}
-              style={[styles.tab, activePlanId === plan.id && styles.tabActive]}
+              style={[
+                styles.planTab,
+                activePlanId === plan.id && styles.planTabActive
+              ]}
               onPress={() => {
                 setActivePlanId(plan.id);
                 setIsRenamingPlanId(null);
                 setPlanNameInput('');
               }}
-              activeOpacity={0.9}
+              activeOpacity={0.8}
             >
-              <LinearGradient
-                colors={activePlanId === plan.id ? ['#667eea', '#764ba2'] : ['#ffffff', '#ffffff']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.tabGradient}
+              <Text
+                style={[
+                  styles.planTabText,
+                  activePlanId === plan.id && styles.planTabTextActive
+                ]}
               >
-                <View style={styles.tabContent}>
-                  <Text
-                    style={[styles.tabText, activePlanId === plan.id && styles.tabTextActive]}
-                    numberOfLines={1}
-                  >
-                    {plan.name}
-                  </Text>
-                  
-                  <View style={styles.tabActions}>
-                    <TouchableOpacity
-                      style={styles.tabActionButton}
-                      onPress={() => {
-                        setIsRenamingPlanId(plan.id);
-                        setPlanNameInput(plan.name);
-                      }}
-                    >
-                      <Ionicons
-                        name="pencil"
-                        size={14}
-                        color={activePlanId === plan.id ? 'rgba(255,255,255,0.8)' : '#999'}
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.tabActionButton}
-                      onPress={() => confirmDeletePlan(plan.id)}
-                    >
-                      <Ionicons
-                        name="trash"
-                        size={14}
-                        color={activePlanId === plan.id ? 'rgba(255,180,180,0.9)' : '#ff6b6b'}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </LinearGradient>
+                {plan.name}
+              </Text>
+
+              {activePlanId === plan.id && (
+                <View style={styles.activeTabIndicator} />
+              )}
             </TouchableOpacity>
           ))}
-          
+
           {plans.length < 3 && (
-             <TouchableOpacity
-               style={styles.addPlanTab}
-               onPress={() => {
-                 setIsRenamingPlanId(null);
-                 setPlanNameInput('');
-                 // Focus input or show modal - for now we rely on the input below
-                 // But let's make this button scroll to the input or just be a visual placeholder
-                 // Actually, let's make it trigger the add mode if we had a modal.
-                 // For now, we'll just let the user use the input field below.
-               }}
-             >
-               <View style={styles.addPlanTabContent}>
-                 <Ionicons name="add" size={24} color="#ccc" />
-                 <Text style={styles.addPlanTabText}>New</Text>
-               </View>
-             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.addPlanButton}
+              onPress={() => {
+                setIsRenamingPlanId(null);
+                setPlanNameInput('');
+              }}
+            >
+              <Ionicons name="add" size={20} color="#667eea" />
+            </TouchableOpacity>
+          )}
+        </ScrollView>
+
+        {/* Plan Actions Bar */}
+        <View style={styles.planActionsBar}>
+          {activePlanId && (
+            <>
+              <TouchableOpacity
+                style={styles.planActionButton}
+                onPress={() => {
+                  const plan = plans.find(p => p.id === activePlanId);
+                  if (plan) {
+                    setIsRenamingPlanId(plan.id);
+                    setPlanNameInput(plan.name);
+                  }
+                }}
+              >
+                <Ionicons name="pencil" size={14} color="#666" />
+                <Text style={styles.planActionText}>Rename</Text>
+              </TouchableOpacity>
+
+              <View style={styles.verticalDivider} />
+
+              <TouchableOpacity
+                style={styles.planActionButton}
+                onPress={handleResetCriteria}
+              >
+                <Ionicons name="refresh" size={14} color="#667eea" />
+                <Text style={[styles.planActionText, { color: '#667eea' }]}>Reset</Text>
+              </TouchableOpacity>
+
+              <View style={styles.verticalDivider} />
+
+              <TouchableOpacity
+                style={styles.planActionButton}
+                onPress={() => confirmDeletePlan(activePlanId)}
+              >
+                <Ionicons name="trash-outline" size={14} color="#ff6b6b" />
+                <Text style={[styles.planActionText, { color: '#ff6b6b' }]}>Delete Plan</Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
 
-        {/* Add / Rename Plan Input */}
-        <View style={styles.planInputContainer}>
-          <View style={styles.planInputWrapper}>
-            <TextInput
-              style={styles.planNameInput}
-              value={planNameInput}
-              onChangeText={setPlanNameInput}
-              placeholder={isRenamingPlanId ? 'Rename plan...' : 'Create new plan...'}
-              placeholderTextColor="#999"
-            />
+        {/* Add/Rename Input */}
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.modernInput}
+            value={planNameInput}
+            onChangeText={setPlanNameInput}
+            placeholder={isRenamingPlanId ? 'Rename plan...' : 'Create new plan name...'}
+            placeholderTextColor="#999"
+          />
+          {planNameInput.length > 0 && (
             <TouchableOpacity
-              style={styles.planActionButton}
+              style={styles.inputActionButton}
               onPress={() =>
                 isRenamingPlanId ? handleRenamePlan(isRenamingPlanId) : handleAddPlan()
               }
             >
-              <LinearGradient
-                colors={['#667eea', '#764ba2']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.planActionGradient}
-              >
-                <Ionicons
-                  name={isRenamingPlanId ? 'checkmark' : 'add'}
-                  size={20}
-                  color="#fff"
-                />
-              </LinearGradient>
+              <Ionicons name="checkmark" size={18} color="#fff" />
             </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Trading Checklist Bar */}
-        <View style={styles.checklistCard}>
-          <LinearGradient
-            colors={['#ffffff', '#f8f9fa']}
-            style={styles.checklistCardGradient}
-          >
-            <View style={styles.checklistHeader}>
-              <View>
-                <Text style={styles.checklistTitle}>
-                  {plans.find(p => p.id === activePlanId)?.name || 'Trading Plan'}
-                </Text>
-                <Text style={styles.checklistSubtitle}>Confirmation Checklist</Text>
-              </View>
-              <View style={styles.progressBadge}>
-                <Text style={styles.progressBadgeText}>{progress.completed}/{progress.total}</Text>
-              </View>
-            </View>
-            
-            <View style={styles.progressBarContainer}>
-              <LinearGradient
-                colors={['#667eea', '#764ba2']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.progressBar, { width: `${progress.percentage}%` }]}
-              />
-            </View>
-            <Text style={styles.progressPercentage}>{progress.percentage}% Complete</Text>
-          </LinearGradient>
-        </View>
-
-        {/* Trading Plan Criteria Checklist */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Criteria</Text>
-          
-          <View style={styles.criterionInputCard}>
-            <TextInput
-              style={styles.criterionInput}
-              value={newCriterionText}
-              onChangeText={setNewCriterionText}
-              placeholder="Add a new rule..."
-              placeholderTextColor="#999"
-              multiline
-            />
-            <TouchableOpacity style={styles.criterionAddButton} onPress={handleAddCriterion}>
-              <LinearGradient
-                colors={['#667eea', '#764ba2']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.criterionAddGradient}
-              >
-                <Ionicons name="add" size={22} color="#fff" />
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-
-          {activePlanCriteria.map((criterion) => (
-            <View
-              key={criterion.id}
-              style={[
-                styles.criterionCard,
-                criterion.checked && styles.criterionCardChecked,
-              ]}
-            >
-              <TouchableOpacity
-                style={styles.checkboxContainer}
-                onPress={() => handleToggleCriterion(criterion.id, criterion.checked)}
-                activeOpacity={0.6}
-              >
-                <View style={[styles.customCheckbox, criterion.checked && styles.customCheckboxChecked]}>
-                  {criterion.checked && <Ionicons name="checkmark" size={14} color="#fff" />}
-                </View>
-              </TouchableOpacity>
-              
-              {editingCriterionId === criterion.id ? (
-                <View style={styles.criterionEditContainer}>
-                  <TextInput
-                    style={styles.criterionEditInput}
-                    value={editingCriterionText}
-                    onChangeText={setEditingCriterionText}
-                    multiline
-                    autoFocus
-                  />
-                  <View style={styles.criterionEditActions}>
-                    <TouchableOpacity
-                      style={[styles.criterionEditActionBtn, { backgroundColor: '#e6fffa' }]}
-                      onPress={handleSaveCriterionEdit}
-                    >
-                      <Ionicons name="checkmark" size={16} color="#28a745" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.criterionEditActionBtn, { backgroundColor: '#fff5f5' }]}
-                      onPress={() => {
-                        setEditingCriterionId(null);
-                        setEditingCriterionText('');
-                      }}
-                    >
-                      <Ionicons name="close" size={16} color="#ff6b6b" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : (
-                <View style={styles.criterionContent}>
-                  <TouchableOpacity 
-                    style={styles.criterionTextContainer}
-                    onPress={() => handleToggleCriterion(criterion.id, criterion.checked)}
-                  >
-                    <Text
-                      style={[
-                        styles.criterionText,
-                        criterion.checked && styles.criterionTextChecked,
-                      ]}
-                    >
-                      {criterion.text}
-                    </Text>
-                  </TouchableOpacity>
-                  
-                  <View style={styles.criterionRowActions}>
-                    <TouchableOpacity
-                      style={styles.criterionIconBtn}
-                      onPress={() => startEditingCriterion(criterion)}
-                    >
-                      <Ionicons name="pencil-outline" size={16} color="#667eea" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.criterionIconBtn}
-                      onPress={() => confirmDeleteCriterion(criterion.id)}
-                    >
-                      <Ionicons name="trash-outline" size={16} color="#ff6b6b" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-            </View>
-          ))}
-          
-          {activePlanCriteria.length === 0 && (
-            <View style={styles.emptyStateContainer}>
-              <Ionicons name="list-outline" size={48} color="#e1e8ed" />
-              <Text style={styles.emptyStateText}>No criteria yet. Add your first rule above!</Text>
-            </View>
           )}
         </View>
 
-        {/* Trading Mindset Section */}
-        <View style={styles.mindsetSection}>
-          <LinearGradient
-            colors={['#667eea', '#764ba2']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.mindsetHeader}
-          >
-            <Text style={styles.mindsetTitle}>TRADING MINDSET</Text>
-            <Text style={styles.mindsetSubtitle}>BULLETPROOF YOUR MINDSET TOOL</Text>
-          </LinearGradient>
+        {/* Progress Card */}
+        <LinearGradient
+          colors={['#ffffff', '#f8f9fa']}
+          style={styles.progressCard}
+        >
+          <View style={styles.progressHeader}>
+            <View>
+              <Text style={styles.progressTitle}>Execution Score</Text>
+              <Text style={styles.progressSubtitle}>
+                {plans.find(p => p.id === activePlanId)?.name || 'Select Plan'}
+              </Text>
+            </View>
+            <View style={styles.percentageBadge}>
+              <Text style={styles.percentageText}>{progress.percentage}%</Text>
+            </View>
+          </View>
 
-          <View style={styles.mindsetContent}>
-            <Text style={styles.mindsetDescription}>
-              Use this tool when: Waiting for a trade • Just about to take a trade • Entered a trade • Moving stop loss • Moving take profit
+          <View style={styles.track}>
+            <LinearGradient
+              colors={progress.percentage === 100 ? ['#00C851', '#007E33'] : ['#667eea', '#764ba2']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[styles.bar, { width: `${progress.percentage}%` }]}
+            />
+          </View>
+          <Text style={styles.progressCount}>{progress.completed} of {progress.total} criteria met</Text>
+        </LinearGradient>
+
+        {/* Criteria Section Header */}
+        <View style={styles.sectionHeaderContainer}>
+          <Text style={styles.sectionTitle}>ACCEPTANCE CRITERIA</Text>
+        </View>
+
+        <View style={styles.addCriterionCard}>
+          <TextInput
+            style={styles.addCriterionInput}
+            value={newCriterionText}
+            onChangeText={setNewCriterionText}
+            placeholder="Add a new rule (e.g. 'RSI Divergence on 1H')"
+            placeholderTextColor="#999"
+            multiline
+          />
+          <TouchableOpacity style={styles.addButton} onPress={handleAddCriterion}>
+            <Ionicons name="add" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
+
+        {activePlanCriteria.length === 0 && (
+          <View style={[styles.emptyContainer, { marginBottom: 20 }]}>
+            <Ionicons name="list" size={40} color="#e0e0e0" />
+            <Text style={styles.emptyText}>Your checklist is empty.</Text>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+
+  const renderFooter = () => (
+    <View style={{ paddingHorizontal: 16 }}>
+      {/* Mindset Section */}
+      <View style={styles.mindsetSection}>
+        <LinearGradient
+          colors={['#667eea', '#764ba2']}
+          style={styles.mindsetHeader}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+        >
+          <View>
+            <Text style={styles.mindsetTitle}>PSYCHOLOGY LOG</Text>
+            <Text style={styles.mindsetSubtitle}>Track your mental state</Text>
+          </View>
+          <TouchableOpacity style={styles.addMindsetButton} onPress={addMindsetEntry}>
+            <Ionicons name="add" size={20} color="#667eea" />
+            <Text style={styles.addMindsetText}>Add Log</Text>
+          </TouchableOpacity>
+        </LinearGradient>
+
+        {mindsetEntries.length === 0 && (
+          <View style={styles.emptyMindset}>
+            <Text style={styles.emptyMindsetText}>
+              "The key to trading success is emotional discipline. If intelligence were the key, there would be a lot more people making money trading."
             </Text>
+            <Text style={styles.emptyMindsetAuthor}>- Victor Sperandeo</Text>
+          </View>
+        )}
 
-            {/* Add New Entry Button */}
-            <TouchableOpacity style={styles.addEntryButton} onPress={addMindsetEntry}>
-              <LinearGradient
-                colors={['#667eea', '#764ba2']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.addEntryGradient}
-              >
-                <Ionicons name="add-circle" size={20} color="#fff" />
-                <Text style={styles.addEntryText}>Add Mindset Entry</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+        {mindsetEntries.map((entry, index) => (
+          <View key={entry.id} style={styles.mindsetCard}>
+            <View style={styles.mindsetCardHeader}>
+              <View style={styles.entryBadge}>
+                <Text style={styles.entryBadgeText}>Log #{index + 1}</Text>
+              </View>
+              <TouchableOpacity onPress={() => deleteMindsetEntry(entry.id)}>
+                <Ionicons name="trash-outline" size={18} color="#ccc" />
+              </TouchableOpacity>
+            </View>
 
-            {/* Mindset Entries Table */}
-            {mindsetEntries.map((entry, index) => (
-              <View key={entry.id} style={styles.mindsetEntry}>
-                <View style={styles.entryHeader}>
-                  <Text style={styles.entryNumber}>Entry #{index + 1}</Text>
-                  <TouchableOpacity 
-                    onPress={() => deleteMindsetEntry(entry.id)}
-                    style={styles.deleteButton}
+            <View style={styles.phaseContainer}>
+              <Text style={styles.labelSmall}>CURRENT PHASE</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.phaseScroll}>
+                {mindsetPhases.map(phase => (
+                  <TouchableOpacity
+                    key={phase}
+                    style={[
+                      styles.phaseChip,
+                      entry.phase === phase && styles.phaseChipActive
+                    ]}
+                    onPress={() => updateEntryPhase(entry.id, phase)}
                   >
-                    <Ionicons name="trash-outline" size={16} color="#ff6b6b" />
+                    <Text style={[
+                      styles.phaseText,
+                      entry.phase === phase && styles.phaseTextActive
+                    ]}>{phase}</Text>
                   </TouchableOpacity>
-                </View>
+                ))}
+              </ScrollView>
+            </View>
 
-                {/* Phase Selector */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>Trading Phase</Text>
-                  <View style={styles.phaseSelector}>
-                    {mindsetPhases.map(phase => (
-                      <TouchableOpacity
-                        key={phase}
-                        style={[
-                          styles.phaseOption,
-                          entry.phase === phase && styles.phaseOptionSelected
-                        ]}
-                        onPress={() => updateEntryPhase(entry.id, phase)}
-                      >
-                        <Text style={[
-                          styles.phaseOptionText,
-                          entry.phase === phase && styles.phaseOptionTextSelected
-                        ]}>
-                          {phase}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
+            <View style={styles.gridContainer}>
+              <View style={styles.gridItem}>
+                <TooltipLabel text="Expectations" tooltipKey="expectations" />
+                <TextInput
+                  style={styles.inputSimple}
+                  value={entry.beforeTrade.expectations}
+                  onChangeText={(text) => updateMindsetEntry(entry.id, 'beforeTrade', 'expectations', text)}
+                  placeholder="What do I expect?"
+                  placeholderTextColor="#ccc"
+                />
+              </View>
 
-                {/* Before Trade Section */}
-                <View style={styles.tradeSection}>
-                  <Text style={styles.sectionHeader}>Before-Trade</Text>
-                  
-                  <View style={styles.fieldGroup}>
-                    <TooltipLabel text="What are my expectations?" tooltipKey="expectations" />
-                    <TextInput
-                      style={styles.textInput}
-                      value={entry.beforeTrade.expectations}
-                      onChangeText={(text) => updateMindsetEntry(entry.id, 'beforeTrade', 'expectations', text)}
-                      placeholder="Describe your trade expectations..."
-                      multiline
-                    />
-                  </View>
-
-                  <View style={styles.fieldGroup}>
+              <View style={styles.gridItem}>
+                <TooltipLabel text="Meets Rules?" tooltipKey="tpCriteria" />
+                <View style={styles.yesNoContainer}>
+                  {['Yes', 'No'].map(opt => (
                     <TouchableOpacity
-                      style={styles.checkboxField}
-                      onPress={() => updateMindsetEntry(entry.id, 'beforeTrade', 'groundExpectations', !entry.beforeTrade.groundExpectations)}
+                      key={opt}
+                      style={[
+                        styles.yesNoButton,
+                        entry.beforeTrade.meetsCriteria === opt && (opt === 'Yes' ? styles.yesActive : styles.noActive)
+                      ]}
+                      onPress={() => updateMindsetEntry(entry.id, 'beforeTrade', 'meetsCriteria', opt)}
                     >
-                      <Ionicons
-                        name={entry.beforeTrade.groundExpectations ? 'checkbox' : 'checkbox-outline'}
-                        size={20}
-                        color={entry.beforeTrade.groundExpectations ? '#667eea' : '#ccc'}
-                      />
-                      <TouchableOpacity 
-                        style={styles.checkboxLabelContainer}
-                        onPress={() => showTooltip('groundExpectations')}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.checkboxLabel}>Ground Expectations</Text>
-                        <Ionicons name="information-circle-outline" size={14} color="#667eea" style={styles.tooltipIconSmall} />
-                      </TouchableOpacity>
+                      <Text style={[
+                        styles.yesNoText,
+                        entry.beforeTrade.meetsCriteria === opt && { color: '#fff' }
+                      ]}>{opt}</Text>
                     </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.fieldGroup}>
-                    <TooltipLabel text="Does the trade meet my TP criteria?" tooltipKey="tpCriteria" />
-                    <View style={styles.dropdownContainer}>
-                      <TouchableOpacity
-                        style={[styles.dropdown, entry.beforeTrade.meetsCriteria === 'Yes' && styles.dropdownSelected]}
-                        onPress={() => updateMindsetEntry(entry.id, 'beforeTrade', 'meetsCriteria', 'Yes')}
-                      >
-                        <Text style={[styles.dropdownText, entry.beforeTrade.meetsCriteria === 'Yes' && styles.dropdownTextSelected]}>Yes</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.dropdown, entry.beforeTrade.meetsCriteria === 'No' && styles.dropdownSelected]}
-                        onPress={() => updateMindsetEntry(entry.id, 'beforeTrade', 'meetsCriteria', 'No')}
-                      >
-                        <Text style={[styles.dropdownText, entry.beforeTrade.meetsCriteria === 'No' && styles.dropdownTextSelected]}>No</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  <View style={styles.fieldGroup}>
-                    <Text style={styles.fieldLabel}>Entry Price (Optional)</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      value={entry.beforeTrade.entryPrice}
-                      onChangeText={(text) => updateMindsetEntry(entry.id, 'beforeTrade', 'entryPrice', text)}
-                      placeholder="1.2345"
-                      keyboardType="numeric"
-                    />
-                  </View>
-                </View>
-
-                {/* After Trade Section */}
-                <View style={styles.tradeSection}>
-                  <Text style={styles.sectionHeader}>After-Trade</Text>
-                  
-                  <View style={styles.fieldGroup}>
-                    <TooltipLabel text="Emotion (+/-)" tooltipKey="emotion" />
-                    <View style={styles.emotionSelector}>
-                      {emotionOptions.map(emotion => (
-                        <TouchableOpacity
-                          key={emotion.value}
-                          style={[
-                            styles.emotionOption,
-                            entry.afterTrade.emotion === emotion.value && styles.emotionOptionSelected
-                          ]}
-                          onPress={() => updateMindsetEntry(entry.id, 'afterTrade', 'emotion', emotion.value)}
-                        >
-                          <Text style={styles.emotionEmoji}>{emotion.label.split(' ')[0]}</Text>
-                          <Text style={styles.emotionScore}>{emotion.score}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-
-                  <View style={styles.fieldGroup}>
-                    <TooltipLabel text="Notes & Refinements" tooltipKey="notes" />
-                    <TextInput
-                      style={[styles.textInput, styles.textAreaLarge]}
-                      value={entry.afterTrade.notes}
-                      onChangeText={(text) => updateMindsetEntry(entry.id, 'afterTrade', 'notes', text)}
-                      placeholder="What did you learn? How can you improve?"
-                      multiline
-                      numberOfLines={4}
-                    />
-                  </View>
+                  ))}
                 </View>
               </View>
-            ))}
+            </View>
+
+            <View style={styles.divider} />
+
+            <View>
+              <TooltipLabel text="Emotional State" tooltipKey="emotion" />
+              <View style={styles.emotionRow}>
+                {emotionOptions.map(emo => (
+                  <TouchableOpacity
+                    key={emo.value}
+                    style={[
+                      styles.emotionChip,
+                      entry.afterTrade.emotion === emo.value && { backgroundColor: emo.color, borderColor: emo.color }
+                    ]}
+                    onPress={() => updateMindsetEntry(entry.id, 'afterTrade', 'emotion', emo.value)}
+                  >
+                    <Text style={styles.emotionEmoji}>{emo.label.split(' ')[0]}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={{ marginTop: 15 }}>
+              <TooltipLabel text="Notes" tooltipKey="notes" />
+              <TextInput
+                style={[styles.inputSimple, { height: 60 }]}
+                value={entry.afterTrade.notes}
+                onChangeText={(text) => updateMindsetEntry(entry.id, 'afterTrade', 'notes', text)}
+                placeholder="Reflections..."
+                placeholderTextColor="#ccc"
+                multiline
+              />
+            </View>
+
           </View>
-        </View>
+        ))}
 
-        {/* Ideal Mindset Quote */}
-        <View style={styles.mindsetQuote}>
-          <LinearGradient
-            colors={['#f093fb', '#f5576c']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.quoteContainer}
-          >
-            <Ionicons name="bulb" size={24} color="#fff" style={styles.quoteIcon} />
-            <Text style={styles.quoteTitle}>The Ideal Mindset</Text>
-            <Text style={styles.quoteText}>
-              "I do not care which direction the market moves. I do not care whether this is a win or a loss.
-              {'\n\n'}
-              I am focused on consistently and persistently executing on my trading plan (my edge) which I know will be profitable over 1000 trades."
-            </Text>
-          </LinearGradient>
-        </View>
+      </View>
 
-        <View style={styles.bottomPadding} />
-      </ScrollView>
+      <View style={{ height: 60 }} />
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#667eea" />
+
+      <FlatList
+        data={activePlanCriteria}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={({ item }) => <RenderCriteriaItem item={item} />}
+        ListHeaderComponent={renderHeader}
+        ListFooterComponent={renderFooter}
+        contentContainerStyle={{ paddingBottom: 20 }}
+      />
 
       {/* Tooltip Modal */}
       <Modal
@@ -850,28 +799,23 @@ const CriteriaScreen = () => {
         animationType="fade"
         onRequestClose={hideTooltip}
       >
-        <TouchableOpacity 
-          style={styles.tooltipOverlay}
+        <TouchableOpacity
+          style={styles.modalOverlay}
           activeOpacity={1}
           onPress={hideTooltip}
         >
-          <TouchableOpacity style={styles.tooltipModal} activeOpacity={1}>
-            <View style={styles.tooltipHeader}>
-              <Text style={styles.tooltipModalTitle}>{tooltipTitle}</Text>
-              <TouchableOpacity onPress={hideTooltip} style={styles.tooltipCloseButton}>
-                <Ionicons name="close" size={20} color="#666" />
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{tooltipTitle}</Text>
+              <TouchableOpacity onPress={hideTooltip}>
+                <Ionicons name="close" size={24} color="#333" />
               </TouchableOpacity>
             </View>
-            <ScrollView 
-              style={styles.tooltipContentContainer} 
-              showsVerticalScrollIndicator={true}
-              contentContainerStyle={styles.tooltipContentInner}
-            >
-              <Text style={styles.tooltipModalContent}>{tooltipContent}</Text>
-            </ScrollView>
-          </TouchableOpacity>
+            <Text style={styles.modalBody}>{tooltipContent}</Text>
+          </View>
         </TouchableOpacity>
       </Modal>
+
     </View>
   );
 };
@@ -879,24 +823,25 @@ const CriteriaScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#F7F7FA', // Clean grey-white background
   },
   header: {
-    paddingTop: 50,
-    paddingBottom: 20,
+    paddingTop: 60,
+    paddingBottom: 25,
     paddingHorizontal: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 8,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
+    elevation: 10,
   },
   title: {
     fontSize: 28,
     fontWeight: '800',
     color: '#fff',
-    marginBottom: 8,
-    letterSpacing: 0.5,
+    marginBottom: 4,
   },
   subtitle: {
     fontSize: 16,
@@ -906,705 +851,539 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 20,
+    paddingTop: 24,
   },
-
-  // Tab Styles
-  plansHeaderContainer: {
-    marginBottom: 16,
+  sectionHeaderContainer: {
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 13,
     fontWeight: '800',
-    color: '#1a1a1a',
-    letterSpacing: 0.3,
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    marginBottom: 24,
-    gap: 12,
-  },
-  tab: {
-    flex: 1,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-    height: 80,
-  },
-  tabActive: {
-    shadowColor: '#667eea',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
-    transform: [{ scale: 1.02 }],
-  },
-  tabGradient: {
-    flex: 1,
-    padding: 12,
-  },
-  tabContent: {
-    flex: 1,
-    justifyContent: 'space-between',
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#6c757d',
-    marginBottom: 4,
-  },
-  tabTextActive: {
-    color: '#fff',
-    fontWeight: '800',
-  },
-  tabActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    gap: 12,
-  },
-  tabActionButton: {
-    padding: 4,
-  },
-  addPlanTab: {
-    width: 50,
-    borderRadius: 16,
-    backgroundColor: '#f1f3f5',
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-    borderStyle: 'dashed',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addPlanTabContent: {
-    alignItems: 'center',
-  },
-  addPlanTabText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#adb5bd',
-    marginTop: 2,
+    color: '#9ba0b8',
+    letterSpacing: 1.2,
   },
 
-  // Plan Input Styles
-  planInputContainer: {
-    marginBottom: 24,
+  // Tabs
+  tabsScroll: {
+    marginBottom: 15,
+    overflow: 'visible',
   },
-  planInputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  tabsContainer: {
+    paddingVertical: 5,
+    gap: 12,
+  },
+  planTab: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 6,
+    borderRadius: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowRadius: 5,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#f1f3f5',
+    borderColor: 'transparent',
   },
-  planNameInput: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: '#2c3e50',
-    fontWeight: '500',
+  planTabActive: {
+    backgroundColor: '#fff',
+    borderColor: '#667eea',
+    shadowColor: '#667eea',
+    shadowOpacity: 0.2,
+  },
+  planTabText: {
+    color: '#8b939c',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  planTabTextActive: {
+    color: '#667eea',
+    fontWeight: '800',
+  },
+  addPlanButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(102, 126, 234, 0.3)',
+    borderStyle: 'dashed',
+  },
+
+  planActionsBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
   },
   planActionButton: {
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  planActionGradient: {
-    padding: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // Enhanced Checklist Card Styles
-  checklistCard: {
-    borderRadius: 24,
-    marginBottom: 32,
-    shadowColor: '#667eea',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 10,
-    backgroundColor: '#fff',
-  },
-  checklistCardGradient: {
-    padding: 24,
-    borderRadius: 24,
-  },
-  checklistHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 20,
-  },
-  checklistTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#1a1a1a',
-    letterSpacing: 0.3,
-    marginBottom: 4,
-  },
-  checklistSubtitle: {
-    fontSize: 14,
-    color: '#868e96',
-    fontWeight: '500',
-  },
-  progressBadge: {
-    backgroundColor: 'rgba(102, 126, 234, 0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  progressBadgeText: {
-    fontSize: 14,
-    color: '#667eea',
-    fontWeight: '800',
-  },
-  progressBarContainer: {
-    height: 12,
-    backgroundColor: '#f1f3f5',
-    borderRadius: 6,
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-  progressBar: {
-    height: 12,
-    borderRadius: 6,
-  },
-  progressPercentage: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#667eea',
-    textAlign: 'center',
-  },
-
-  // Enhanced Criteria Styles
-  criterionInputCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 8,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: '#f1f3f5',
+    padding: 4,
   },
-  criterionInput: {
+  planActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+    marginLeft: 4,
+  },
+  verticalDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: '#ddd',
+    marginHorizontal: 12,
+  },
+
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modernInput: {
     flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 15,
-    color: '#2c3e50',
-    fontWeight: '500',
-    maxHeight: 100,
-  },
-  criterionAddButton: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginRight: 4,
-  },
-  criterionAddGradient: {
-    padding: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  
-  criterionCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 12,
+    color: '#333',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.03,
-    shadowRadius: 8,
+    shadowRadius: 5,
     elevation: 2,
-    borderWidth: 1,
-    borderColor: '#f8f9fa',
   },
-  criterionCardChecked: {
-    backgroundColor: '#fcfdff',
-    borderColor: '#eef2ff',
-  },
-  checkboxContainer: {
-    marginRight: 16,
-    marginTop: 2,
-  },
-  customCheckbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#e1e8ed',
+  inputActionButton: {
+    marginLeft: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#667eea',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 4,
   },
-  customCheckboxChecked: {
+
+  // Progress Card
+  progressCard: {
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 15,
+    elevation: 5,
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 15,
+  },
+  progressTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#333',
+  },
+  progressSubtitle: {
+    fontSize: 13,
+    color: '#8b939c',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  percentageBadge: {
+    backgroundColor: 'rgba(50, 50, 50, 0.05)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  percentageText: {
+    fontWeight: '800',
+    color: '#333',
+  },
+  track: {
+    height: 10,
+    backgroundColor: '#f1f2f6',
+    borderRadius: 5,
+    marginBottom: 10,
+    overflow: 'hidden',
+  },
+  bar: {
+    height: '100%',
+    borderRadius: 5,
+  },
+  progressCount: {
+    fontSize: 12,
+    color: '#8b939c',
+    fontWeight: '600',
+    textAlign: 'right',
+  },
+
+  // Criteria Section
+  criteriaSection: {
+    marginBottom: 30,
+  },
+  addCriterionCard: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 6,
+    paddingLeft: 16,
+    alignItems: 'center',
+    marginBottom: 16, // Spacing from list
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  addCriterionInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#333',
+    paddingVertical: 8,
+  },
+  addButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#764ba2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  criterionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#f0f0f5',
+  },
+  criterionCardChecked: {
+    backgroundColor: '#fafbfc',
+    borderColor: 'transparent',
+  },
+  checkboxArea: {
+    marginRight: 15,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxChecked: {
     backgroundColor: '#667eea',
     borderColor: '#667eea',
   },
   criterionContent: {
     flex: 1,
   },
-  criterionTextContainer: {
-    marginBottom: 8,
-  },
   criterionText: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#2c3e50',
-    lineHeight: 24,
     fontWeight: '600',
+    lineHeight: 22,
   },
   criterionTextChecked: {
-    color: '#adb5bd',
+    color: '#9ca3af',
     textDecorationLine: 'line-through',
     fontWeight: '500',
   },
-  criterionRowActions: {
+  criterionActions: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 16,
+    gap: 12,
+    marginLeft: 10,
   },
-  criterionIconBtn: {
+  actionIcon: {
     padding: 4,
   },
-  
-  // Edit Mode Styles
-  criterionEditContainer: {
-    flex: 1,
+  editContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  criterionEditInput: {
-    fontSize: 16,
-    color: '#2c3e50',
-    lineHeight: 24,
-    fontWeight: '500',
+  editInput: {
+    flex: 1,
+    fontSize: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#667eea',
     paddingBottom: 4,
-    marginBottom: 12,
   },
-  criterionEditActions: {
+  editActions: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 12,
+    marginLeft: 10,
+    gap: 8,
   },
-  criterionEditActionBtn: {
-    padding: 8,
-    borderRadius: 8,
-  },
-  
-  // Empty State
-  emptyStateContainer: {
+  emptyContainer: {
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-    opacity: 0.7,
+    padding: 30,
+    opacity: 0.5,
   },
-  emptyStateText: {
-    marginTop: 12,
-    fontSize: 15,
-    color: '#adb5bd',
-    fontWeight: '500',
+  emptyText: {
+    marginTop: 10,
+    fontSize: 14,
+    color: '#666',
   },
 
-  // Enhanced Mindset Section Styles
+  // Mindset Section
   mindsetSection: {
-    marginBottom: 24,
+    marginBottom: 40,
   },
   mindsetHeader: {
-    padding: 28,
+    padding: 20,
     borderRadius: 20,
     marginBottom: 20,
-    shadowColor: '#667eea',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 12,
-  },
-  mindsetTitle: {
-    fontSize: 26,
-    fontWeight: '900',
-    color: '#fff',
-    textAlign: 'center',
-    letterSpacing: 1.2,
-    marginBottom: 4,
-  },
-  mindsetSubtitle: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.95)',
-    textAlign: 'center',
-    letterSpacing: 0.8,
-    fontWeight: '600',
-  },
-  mindsetContent: {
-    gap: 20,
-  },
-  mindsetDescription: {
-    fontSize: 15,
-    color: '#6c757d',
-    fontStyle: 'italic',
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 12,
-    backgroundColor: 'rgba(102, 126, 234, 0.05)',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(102, 126, 234, 0.1)',
-  },
-
-  // Enhanced Add Entry Button
-  addEntryButton: {
-    marginBottom: 20,
-    shadowColor: '#667eea',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  addEntryGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 16,
-  },
-  addEntryText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '700',
-    marginLeft: 10,
-    letterSpacing: 0.3,
-  },
-
-  // Enhanced Mindset Entry Styles
-  mindsetEntry: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 24,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.05)',
-  },
-  entryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 2,
-    borderBottomColor: '#f8f9fa',
   },
-  entryNumber: {
-    fontSize: 18,
-    fontWeight: '800',
+  mindsetTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#fff',
+  },
+  mindsetSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  addMindsetButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  addMindsetText: {
     color: '#667eea',
+    fontSize: 13,
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+  emptyMindset: {
+    padding: 30,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#eee',
+    borderStyle: 'dashed',
+  },
+  emptyMindsetText: {
+    fontSize: 15,
+    textAlign: 'center',
+    color: '#666',
+    fontStyle: 'italic',
+    lineHeight: 24,
+  },
+  emptyMindsetAuthor: {
+    marginTop: 10,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#333',
+  },
+  mindsetCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#f1f1f5',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  mindsetCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 15,
+  },
+  entryBadge: {
+    backgroundColor: '#F0F4FF',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  entryBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#667eea',
+  },
+  labelSmall: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#9ca3af',
+    marginBottom: 8,
     letterSpacing: 0.5,
   },
-  deleteButton: {
-    padding: 8,
-    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+  phaseContainer: {
+    marginBottom: 15,
+  },
+  phaseScroll: {
+    gap: 8,
+  },
+  phaseChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#eee',
+  },
+  phaseChipActive: {
+    backgroundColor: '#667eea',
+    borderColor: '#667eea',
+  },
+  phaseText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '600',
+  },
+  phaseTextActive: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  gridContainer: {
+    flexDirection: 'row',
+    gap: 15,
+    marginBottom: 15,
+  },
+  gridItem: {
+    flex: 1,
+  },
+  inputSimple: {
+    backgroundColor: '#f8f9fa',
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#eee',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#333',
+  },
+  yesNoContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 10,
+    padding: 2,
+  },
+  yesNoButton: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  yesActive: {
+    backgroundColor: '#00C851',
+  },
+  noActive: {
+    backgroundColor: '#ff4444',
+  },
+  yesNoText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#666',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#f1f1f5',
+    marginVertical: 15,
+  },
+  emotionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  emotionChip: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f8f9fa',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  emotionEmoji: {
+    fontSize: 18,
   },
 
-  // Enhanced Field Styles
-  fieldGroup: {
-    marginBottom: 20,
-  },
-  fieldLabel: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#2c3e50',
-    marginBottom: 10,
-    letterSpacing: 0.2,
-  },
+  // Tooltip Modal
   tooltipLabelContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 6,
+  },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#4b5563',
   },
   tooltipIcon: {
-    marginLeft: 8,
+    marginLeft: 4,
   },
-  tooltipIconSmall: {
-    marginLeft: 6,
-  },
-  textInput: {
-    borderWidth: 1,
-    borderColor: '#e1e8ed',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 15,
-    color: '#2c3e50',
-    backgroundColor: '#fafbfc',
-    fontWeight: '500',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  textAreaLarge: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-
-  // Enhanced Phase Selector
-  phaseSelector: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  phaseOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 25,
-    backgroundColor: '#f8f9fa',
-    borderWidth: 1,
-    borderColor: '#e1e8ed',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  phaseOptionSelected: {
-    backgroundColor: '#667eea',
-    borderColor: '#667eea',
-    shadowColor: '#667eea',
-    shadowOpacity: 0.3,
-  },
-  phaseOptionText: {
-    fontSize: 13,
-    color: '#6c757d',
-    fontWeight: '600',
-  },
-  phaseOptionTextSelected: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-
-  // Enhanced Checkbox Field
-  checkboxField: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  checkboxLabelContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 12,
-  },
-  checkboxLabel: {
-    fontSize: 15,
-    color: '#2c3e50',
-    fontWeight: '600',
-  },
-
-  // Enhanced Dropdown
-  dropdownContainer: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  dropdown: {
+  modalOverlay: {
     flex: 1,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderWidth: 1,
-    borderColor: '#e1e8ed',
-    borderRadius: 12,
-    backgroundColor: '#fafbfc',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  dropdownSelected: {
-    backgroundColor: '#667eea',
-    borderColor: '#667eea',
-    shadowColor: '#667eea',
-    shadowOpacity: 0.3,
-  },
-  dropdownText: {
-    fontSize: 15,
-    color: '#2c3e50',
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  dropdownTextSelected: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-
-  // Enhanced Trade Sections
-  tradeSection: {
-    marginBottom: 24,
-    paddingTop: 20,
-    borderTopWidth: 2,
-    borderTopColor: '#f8f9fa',
-  },
-  sectionHeader: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#667eea',
-    marginBottom: 20,
-    letterSpacing: 0.5,
-  },
-
-  // Enhanced Emotion Selector
-  emotionSelector: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  emotionOption: {
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 16,
-    backgroundColor: '#f8f9fa',
-    borderWidth: 1,
-    borderColor: '#e1e8ed',
-    minWidth: 70,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  emotionOptionSelected: {
-    backgroundColor: '#667eea',
-    borderColor: '#667eea',
-    shadowColor: '#667eea',
-    shadowOpacity: 0.3,
-  },
-  emotionEmoji: {
-    fontSize: 20,
-    marginBottom: 4,
-  },
-  emotionScore: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#6c757d',
-  },
-
-  // Enhanced Quote Styles
-  mindsetQuote: {
-    marginBottom: 24,
-    shadowColor: '#f093fb',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 12,
-  },
-  quoteContainer: {
-    padding: 28,
-    borderRadius: 20,
-    alignItems: 'center',
-  },
-  quoteIcon: {
-    marginBottom: 16,
-  },
-  quoteTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#fff',
-    marginBottom: 20,
-    textAlign: 'center',
-    letterSpacing: 0.5,
-  },
-  quoteText: {
-    fontSize: 16,
-    color: '#fff',
-    textAlign: 'center',
-    lineHeight: 26,
-    fontStyle: 'italic',
-    fontWeight: '500',
-    letterSpacing: 0.2,
-  },
-
-  bottomPadding: {
-    height: 40,
-  },
-
-  // Tooltip Modal Styles
-  tooltipOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
+    padding: 20,
   },
-  tooltipModal: {
+  modalContent: {
     backgroundColor: '#fff',
-    borderRadius: 16,
-    width: '92%',
-    height: '70%',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 8,
-    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 20,
   },
-  tooltipHeader: {
+  modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    backgroundColor: '#fff',
+    marginBottom: 12,
   },
-  tooltipModalTitle: {
+  modalTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#333',
-    flex: 1,
-    paddingRight: 12,
   },
-  tooltipCloseButton: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: '#f5f5f5',
+  modalBody: {
+    fontSize: 15,
+    color: '#555',
+    lineHeight: 24,
   },
-  tooltipContentContainer: {
-    flex: 1,
-    backgroundColor: '#fff',
+  activeTabIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    left: '20%',
+    right: '20%',
+    height: 3,
+    backgroundColor: '#667eea',
+    borderRadius: 2,
   },
-  tooltipContentInner: {
-    padding: 20,
-    paddingTop: 16,
-  },
-  tooltipModalContent: {
-    fontSize: 16,
-    lineHeight: 26,
-    color: '#333',
-    textAlign: 'left',
+  deleteButton: {
+    padding: 4,
+    marginLeft: 8,
   },
 });
 

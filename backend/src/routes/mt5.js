@@ -6,6 +6,83 @@ const storageService = require('../services/storage');
 
 const router = express.Router();
 
+// ============ Asset Classification ============
+// Classifies MT5 symbols into asset types for filtering & analytics
+function classifyAsset(symbol) {
+    if (!symbol) return 'other';
+    const s = symbol.toUpperCase();
+
+    // Indices (US500, NAS100, US30, DE40, UK100, JP225, etc.)
+    const indexPatterns = [
+        'US500', 'US30', 'US100', 'NAS100', 'USTEC', 'SP500', 'SPX',
+        'NDX', 'NQ100', 'DJI', 'DJ30',
+        'DE40', 'DE30', 'DAX', 'GER40', 'GER30',
+        'UK100', 'FTSE', 'FRA40', 'CAC',
+        'JP225', 'JPN225', 'NIKKEI',
+        'AUS200', 'HK50', 'HANG', 'CHINA',
+        'EU50', 'STOXX', 'IBEX', 'SWI20',
+        'VIX', 'DXY', 'DOLLAR'
+    ];
+
+    // Commodities (XAUUSD, XAGUSD, USOIL, UKOIL, etc.)
+    const commodityPatterns = [
+        'XAU', 'GOLD',
+        'XAG', 'SILVER',
+        'XPTUSD', 'PLATINUM',
+        'XPDUSD', 'PALLADIUM',
+        'OIL', 'BRENT', 'CRUDE', 'WTI', 'USOIL', 'UKOIL',
+        'NATGAS', 'NGAS',
+        'COPPER', 'XCUUSD',
+        'COCOA', 'COFFEE', 'SUGAR', 'COTTON', 'WHEAT', 'CORN', 'SOYBEAN'
+    ];
+
+    // Crypto
+    const cryptoPatterns = [
+        'BTC', 'ETH', 'XRP', 'LTC', 'ADA', 'SOL', 'DOT', 'DOGE',
+        'BNB', 'AVAX', 'MATIC', 'LINK', 'UNI', 'SHIB'
+    ];
+
+    // Stocks (individual equities — typically 1-5 chars or end with .US/.UK)
+    const stockPatterns = [
+        'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'TSLA', 'META', 'NVDA',
+        'NFLX', 'AMD', 'INTC', 'BABA', 'PYPL', 'DIS', 'BA', 'UBER',
+        '.US', '.UK', '.DE', '.FR', '.HK'
+    ];
+
+    for (const p of indexPatterns) {
+        if (s.includes(p)) return 'index';
+    }
+    for (const p of commodityPatterns) {
+        if (s.includes(p)) return 'commodity';
+    }
+    for (const p of cryptoPatterns) {
+        if (s.includes(p)) return 'crypto';
+    }
+    for (const p of stockPatterns) {
+        if (s.includes(p)) return 'stock';
+    }
+
+    // Forex — major/minor/exotic pairs (6-7 char combos of currency codes)
+    const currencies = ['EUR','USD','GBP','JPY','CHF','CAD','AUD','NZD','SEK','NOK','DKK','SGD','HKD','MXN','ZAR','TRY','PLN','CZK','HUF','RUB','CNY','INR','THB','TWD','KRW'];
+    for (const c1 of currencies) {
+        for (const c2 of currencies) {
+            if (c1 !== c2 && s === c1 + c2) return 'forex';
+        }
+    }
+
+    // If symbol is 6 chars and looks like a currency pair
+    if (s.length === 6 || s.length === 7) {
+        const base = s.substring(0, 3);
+        const quote = s.substring(3, 6);
+        if (currencies.includes(base) && currencies.includes(quote)) return 'forex';
+    }
+
+    return 'other';
+}
+
+// Expose for testing
+router.classifyAsset = classifyAsset;
+
 // Configure Multer for memory storage (for Supabase upload)
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -115,6 +192,7 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
             const now = new Date();
             const title = `MT5: ${type} ${symbol}`;
             const content = `Automated Entry: ${type} ${symbol} @ ${price}`;
+            const assetType = classifyAsset(symbol);
 
             if (existing?.id) {
                 await runQuery(`
@@ -125,7 +203,8 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                         entry_price = COALESCE($3, entry_price),
                         stop_loss = COALESCE($4, stop_loss),
                         take_profit = COALESCE($5, take_profit),
-                        mt5_position_id = COALESCE($6, mt5_position_id)
+                        mt5_position_id = COALESCE($6, mt5_position_id),
+                        asset_type = COALESCE($8, asset_type)
                     WHERE id = $7
                 `, [
                     title,
@@ -134,7 +213,8 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                     sl || null,
                     tp || null,
                     positionId || null,
-                    existing.id
+                    existing.id,
+                    assetType
                 ]);
 
                 return res.status(200).json({ success: true, message: 'Trade entry updated', entryId: existing.id });
@@ -145,13 +225,13 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                     title, content, tags, is_private, account_id,
                     mt5_ticket, mt5_position_id, symbol, direction, volume, 
                     entry_price, stop_loss, take_profit, before_image_url,
-                    created_at, updated_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
+                    asset_type, created_at, updated_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())
                 RETURNING id
             `, [
                 title,
                 content,
-                JSON.stringify(['MT5', 'Automated', symbol]),
+                JSON.stringify(['MT5', 'Automated', symbol, assetType]),
                 true,
                 accountId,
                 ticket,
@@ -162,7 +242,8 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                 price,
                 sl || null,
                 tp || null,
-                imageUrl
+                imageUrl,
+                assetType
             ]);
 
             res.status(201).json({ success: true, message: 'Trade entry recorded', entryId: result.rows[0].id });
@@ -186,18 +267,19 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
 
                 if (!fallback) {
                     // Orphaned exit — create new entry with all available data
+                    const assetType = classifyAsset(symbol);
                     const result = await runQuery(`
                         INSERT INTO journal_entries (
                             title, content, tags, is_private, account_id,
                             mt5_ticket, mt5_position_id, symbol, direction, after_image_url, 
                             exit_price, pnl, commission, swap, balance,
-                            created_at, updated_at
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())
+                            asset_type, created_at, updated_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())
                         RETURNING id
                     `, [
                         `MT5 Exit: ${type} ${symbol}`,
                         `Orphaned Exit: ${type} ${symbol} @ ${price}. PnL: ${totalPnL}`,
-                        JSON.stringify(['MT5', 'Automated', 'Orphaned', symbol]),
+                        JSON.stringify(['MT5', 'Automated', 'Orphaned', symbol, assetType]),
                         true,
                         accountId,
                         ticket,
@@ -209,7 +291,8 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                         totalPnL,
                         commission || 0,
                         swap || 0,
-                        balance || 0
+                        balance || 0,
+                        assetType
                     ]);
                     return res.status(200).json({ success: true, message: 'Orphaned exit recorded', entryId: result.rows[0].id });
                 }

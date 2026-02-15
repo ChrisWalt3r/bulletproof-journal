@@ -1,9 +1,8 @@
-import 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { ActivityIndicator, View } from 'react-native';
 
@@ -26,10 +25,11 @@ import AccountGrowthScreen from './src/screens/AccountGrowthScreen';
 import LoadingScreen from './src/screens/LoadingScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import SignupScreen from './src/screens/SignupScreen';
+import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 
 const Tab = createBottomTabNavigator();
-const Stack = createStackNavigator();
-const AuthStack = createStackNavigator();
+const Stack = createNativeStackNavigator();
+const AuthStack = createNativeStackNavigator();
 
 // Journal Stack Navigator
 function JournalStack() {
@@ -64,6 +64,7 @@ function AuthenticationNavigator() {
     <AuthStack.Navigator screenOptions={{ headerShown: false }}>
       <AuthStack.Screen name="Login" component={LoginScreen} />
       <AuthStack.Screen name="Signup" component={SignupScreen} />
+      <AuthStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
     </AuthStack.Navigator>
   );
 }

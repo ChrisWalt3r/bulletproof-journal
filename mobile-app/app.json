@@ -20,20 +20,16 @@
         "backgroundColor": "#667eea"
       },
       "package": "com.bulletproofjournal.app",
-      "usesCleartextTraffic": true,
       "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.READ_EXTERNAL_STORAGE"
       ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-sqlite",
       [
         "expo-image-picker",
         {

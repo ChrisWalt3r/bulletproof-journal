@@ -179,17 +179,22 @@ const JournalListScreen = ({ navigation, route }) => {
       yesterday.setDate(yesterday.getDate() - 1);
       const isYesterday = date.toDateString() === yesterday.toDateString();
 
+      let dateLabel;
       if (isToday) {
-        return 'Today';
+        dateLabel = 'Today';
       } else if (isYesterday) {
-        return 'Yesterday';
+        dateLabel = 'Yesterday';
       } else {
-        return date.toLocaleDateString('en-US', {
+        dateLabel = date.toLocaleDateString('en-US', {
           year: 'numeric',
           month: 'short',
           day: 'numeric',
         });
       }
+
+      // Add time
+      const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return `${dateLabel} • ${time}`;
     } catch (error) {
       console.error('Date formatting error:', error, dateString);
       return 'Date Error';
@@ -259,7 +264,6 @@ const JournalListScreen = ({ navigation, route }) => {
     if (content.includes('- [x] WIN')) return 'WIN';
     if (content.includes('- [x] LOSS')) return 'LOSS';
     if (content.includes('- [x] BREAKEVEN')) return 'BREAKEVEN';
-    if (content.includes('- [x] NO OUTCOME')) return 'NO OUTCOME';
     return 'UNKNOWN';
   };
 
@@ -268,7 +272,6 @@ const JournalListScreen = ({ navigation, route }) => {
       case 'WIN': return '#50C878'; // Green
       case 'LOSS': return '#FF6B6B'; // Red
       case 'BREAKEVEN': return '#4A90E2'; // Blue
-      case 'NO OUTCOME': return '#95a5a6'; // Gray
       case 'OPEN': return '#FFA500'; // Orange
       default: return '#f0f0f0'; // Default gray
     }
@@ -404,7 +407,7 @@ const JournalListScreen = ({ navigation, route }) => {
       {/* Filter Chips */}
       <View style={styles.filtersWrapper}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-          {['ALL', 'WIN', 'LOSS', 'BREAKEVEN', 'NO OUTCOME'].map(filter => (
+          {['ALL', 'WIN', 'LOSS', 'BREAKEVEN'].map(filter => (
             <TouchableOpacity
               key={filter}
               style={[
@@ -418,7 +421,7 @@ const JournalListScreen = ({ navigation, route }) => {
                 styles.filterText,
                 activeFilter === filter && styles.activeFilterText
               ]}>
-                {filter === 'NO OUTCOME' ? 'NO OUTCOME' : filter}
+                {filter}
               </Text>
             </TouchableOpacity>
           ))}

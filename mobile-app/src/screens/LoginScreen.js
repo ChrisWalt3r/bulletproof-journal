@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 
 const LoginScreen = ({ navigation }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const { signIn } = useAuth();
 
@@ -30,18 +32,39 @@ const LoginScreen = ({ navigation }) => {
                 <TextInput
                     style={styles.input}
                     placeholder="Email"
+                    placeholderTextColor="#999"
                     value={email}
                     onChangeText={setEmail}
                     autoCapitalize="none"
                     keyboardType="email-address"
                 />
-                <TextInput
-                    style={styles.input}
-                    placeholder="Password"
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry
-                />
+                <View style={styles.passwordContainer}>
+                    <TextInput
+                        style={styles.passwordInput}
+                        placeholder="Password"
+                        placeholderTextColor="#999"
+                        value={password}
+                        onChangeText={setPassword}
+                        secureTextEntry={!showPassword}
+                    />
+                    <TouchableOpacity
+                        style={styles.eyeButton}
+                        onPress={() => setShowPassword(!showPassword)}
+                    >
+                        <Ionicons
+                            name={showPassword ? 'eye-off' : 'eye'}
+                            size={22}
+                            color="#999"
+                        />
+                    </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                    onPress={() => navigation.navigate('ForgotPassword')}
+                    style={styles.forgotButton}
+                >
+                    <Text style={styles.forgotText}>Forgot Password?</Text>
+                </TouchableOpacity>
             </View>
 
             <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
@@ -84,6 +107,34 @@ const styles = StyleSheet.create({
         fontSize: 16,
         borderWidth: 1,
         borderColor: '#E1E1E1',
+        color: '#333',
+    },
+    passwordContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        borderRadius: 10,
+        marginBottom: 8,
+        borderWidth: 1,
+        borderColor: '#E1E1E1',
+    },
+    passwordInput: {
+        flex: 1,
+        padding: 15,
+        fontSize: 16,
+        color: '#333',
+    },
+    eyeButton: {
+        padding: 15,
+    },
+    forgotButton: {
+        alignSelf: 'flex-end',
+        marginBottom: 10,
+    },
+    forgotText: {
+        color: '#4A90E2',
+        fontSize: 14,
+        fontWeight: '500',
     },
     button: {
         backgroundColor: '#4A90E2',

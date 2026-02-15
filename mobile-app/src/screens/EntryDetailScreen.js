@@ -173,7 +173,6 @@ const EntryDetailScreen = ({ route, navigation }) => {
     if (content.includes('- [x] WIN')) return 'WIN';
     if (content.includes('- [x] LOSS')) return 'LOSS';
     if (content.includes('- [x] BREAKEVEN')) return 'BREAKEVEN';
-    if (content.includes('- [x] NO OUTCOME')) return 'NO OUTCOME';
     return 'UNKNOWN';
   };
 
@@ -237,7 +236,6 @@ const EntryDetailScreen = ({ route, navigation }) => {
       case 'LOSS': return '#FF6B6B';
       case 'BREAKEVEN': return '#4A90E2';
       case 'OPEN': return '#FFA500';
-      case 'NO OUTCOME': return '#95a5a6';
       default: return '#666';
     }
   };

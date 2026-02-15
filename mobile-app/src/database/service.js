@@ -83,7 +83,15 @@ const getAllCriteria = async () => {
 export const getCriteriaForPlan = async (planId) => {
   try {
     const criteria = await getAllCriteria();
-    return criteria.filter(c => c.plan_id === planId);
+    const planCriteria = criteria.filter(c => c.plan_id === planId);
+
+    // Sort by position if available, or keep order
+    return planCriteria.sort((a, b) => {
+      if (typeof a.position === 'number' && typeof b.position === 'number') {
+        return a.position - b.position;
+      }
+      return 0;
+    });
   } catch (error) {
     console.error('Error getting criteria for plan:', error);
     return [];
@@ -93,11 +101,16 @@ export const getCriteriaForPlan = async (planId) => {
 export const addCriterionToPlan = async (planId, text) => {
   try {
     const criteria = await getAllCriteria();
+    // Calculate next position
+    const planCriteria = criteria.filter(c => c.plan_id === planId);
+    const maxPos = planCriteria.reduce((max, c) => Math.max(max, c.position || 0), -1);
+
     const newCriterion = {
       id: Date.now(),
       plan_id: planId,
       text,
       checked: false,
+      position: maxPos + 1,
       created_at: new Date().toISOString()
     };
     criteria.push(newCriterion);
@@ -149,6 +162,54 @@ export const deleteCriterion = async (criterionId) => {
     return true;
   } catch (error) {
     console.error('Error deleting criterion:', error);
+    throw error;
+  }
+};
+
+export const resetPlanCriteria = async (planId) => {
+  try {
+    const criteria = await getAllCriteria();
+    let updated = false;
+
+    // Create new array with updated checked status for specific plan
+    const newCriteria = criteria.map(c => {
+      if (c.plan_id === planId && c.checked) {
+        updated = true;
+        return { ...c, checked: false };
+      }
+      return c;
+    });
+
+    if (updated) {
+      await AsyncStorage.setItem(CRITERIA_KEY, JSON.stringify(newCriteria));
+    }
+
+    // Return the updated criteria for this plan
+    return newCriteria.filter(c => c.plan_id === planId);
+  } catch (error) {
+    console.error('Error resetting plan criteria:', error);
+    throw error;
+  }
+};
+
+export const reorderCriteria = async (planId, reorderedCriteria) => {
+  try {
+    const allCriteria = await getAllCriteria();
+    const otherCriteria = allCriteria.filter(c => c.plan_id !== planId);
+
+    // Update positions based on new order
+    const updatedPlanCriteria = reorderedCriteria.map((c, index) => ({
+      ...c,
+      position: index
+    }));
+
+    // Combine and save
+    const finalCriteria = [...otherCriteria, ...updatedPlanCriteria];
+    await AsyncStorage.setItem(CRITERIA_KEY, JSON.stringify(finalCriteria));
+
+    return updatedPlanCriteria;
+  } catch (error) {
+    console.error('Error reordering criteria:', error);
     throw error;
   }
 };

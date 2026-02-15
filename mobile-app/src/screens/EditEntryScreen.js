@@ -41,7 +41,7 @@ const EditEntryScreen = ({ route, navigation }) => {
 
   const pairs = ['EURUSD', 'GBPUSD', 'NZDUSD', 'AUDUSD', 'XAUUSD', 'USDJPY', 'USDCAD', 'USDCHF'];
   const tradeDirections = ['BUY', 'SELL'];
-  const tradeResults = ['WIN', 'BREAKEVEN', 'LOSS', 'NO OUTCOME'];
+  const tradeResults = ['WIN', 'BREAKEVEN', 'LOSS'];
 
   useEffect(() => {
     if (entry && entry.content) {
@@ -94,8 +94,6 @@ const EditEntryScreen = ({ route, navigation }) => {
       setTradeResult('LOSS');
     } else if (content.includes('- [x] BREAKEVEN')) {
       setTradeResult('BREAKEVEN');
-    } else if (content.includes('- [x] NO OUTCOME')) {
-      setTradeResult('NO OUTCOME');
     }
 
     // Parse risk reward
@@ -405,7 +403,6 @@ const EditEntryScreen = ({ route, navigation }) => {
       case 'WIN': return '#50C878';
       case 'BREAKEVEN': return '#4A90E2';
       case 'LOSS': return '#FF6B6B';
-      case 'NO OUTCOME': return '#95a5a6';
       default: return '#ddd';
     }
   };

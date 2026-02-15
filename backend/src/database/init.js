@@ -45,6 +45,7 @@ const createTables = async () => {
       take_profit DECIMAL,
       volume DECIMAL,
       direction TEXT, -- BUY/SELL
+      asset_type TEXT DEFAULT 'forex', -- forex, index, commodity, crypto, stock, other
       
       -- Results
       pnl DECIMAL,
@@ -115,12 +116,33 @@ const createIndexes = async () => {
     'CREATE INDEX IF NOT EXISTS idx_journal_entries_created_at ON journal_entries(created_at)',
     'CREATE INDEX IF NOT EXISTS idx_journal_entries_auth ON journal_entries(account_id)',
     'CREATE INDEX IF NOT EXISTS idx_journal_entries_mt5 ON journal_entries(mt5_ticket)',
+    'CREATE INDEX IF NOT EXISTS idx_journal_entries_asset_type ON journal_entries(asset_type)',
     'CREATE INDEX IF NOT EXISTS idx_accounts_auth ON accounts(auth_id)'
   ];
 
   for (const indexQuery of indexes) {
     await runQuery(indexQuery);
   }
+};
+
+// Live migrations — safely add new columns to existing tables
+const runLiveMigrations = async () => {
+  const migrations = [
+    // Add asset_type column (forex, index, commodity, crypto, stock, other)
+    `ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS asset_type TEXT DEFAULT 'forex'`,
+  ];
+
+  for (const migration of migrations) {
+    try {
+      await runQuery(migration);
+    } catch (err) {
+      // Ignore "already exists" errors, log others
+      if (!err.message.includes('already exists')) {
+        console.warn('Migration warning:', err.message);
+      }
+    }
+  }
+  console.log('Live migrations completed');
 };
 
 // Initialize database
@@ -131,6 +153,9 @@ const initializeDatabase = async () => {
 
     console.log('Creating database indexes...');
     await createIndexes();
+
+    // Run live migrations for new columns
+    await runLiveMigrations();
 
     // Skip data migration for now as we are starting fresh on Cloud
     // await runMigration();

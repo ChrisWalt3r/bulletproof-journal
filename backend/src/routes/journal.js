@@ -6,13 +6,13 @@ const router = express.Router();
 // Get all journal entries
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, limit = 10, search = '', accountId } = req.query;
+    const { page = 1, limit = 10, search = '', accountId, assetType } = req.query;
     const offset = (page - 1) * limit;
 
     let query = `
       SELECT id, title, content, mood_rating, tags, is_private, image_url, image_filename, account_id, reason_mindset, created_at, updated_at,
              mt5_ticket, before_image_url, after_image_url, pnl, commission, swap, entry_price, exit_price, balance, stop_loss, take_profit,
-             is_plan_compliant, plan_notes, symbol, direction, volume, following_plan, emotional_state, notes
+             is_plan_compliant, plan_notes, symbol, direction, volume, following_plan, emotional_state, notes, asset_type
       FROM journal_entries 
     `;
     let params = [];
@@ -23,6 +23,12 @@ router.get('/', async (req, res) => {
     if (accountId) {
       whereConditions.push(`account_id = $${paramCount++}`);
       params.push(parseInt(accountId));
+    }
+
+    // Filter by asset type if specified
+    if (assetType) {
+      whereConditions.push(`asset_type = $${paramCount++}`);
+      params.push(assetType);
     }
 
     // Add search filter
@@ -53,6 +59,10 @@ router.get('/', async (req, res) => {
       if (accountId) {
         countConditions.push(`account_id = $${countParamIdx++}`);
         countParams.push(parseInt(accountId));
+      }
+      if (assetType) {
+        countConditions.push(`asset_type = $${countParamIdx++}`);
+        countParams.push(assetType);
       }
       if (search) {
         countConditions.push(`(title ILIKE $${countParamIdx} OR content ILIKE $${countParamIdx})`);

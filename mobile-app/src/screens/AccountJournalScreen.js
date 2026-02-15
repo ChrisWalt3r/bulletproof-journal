@@ -39,7 +39,7 @@ const AccountJournalScreen = ({ route, navigation }) => {
 
     setLoading(true);
     try {
-      const response = await journalAPI.getEntries(pageNum, 10, search);
+      const response = await journalAPI.getEntries(pageNum, 10, search, account.id);
 
       // Filter entries for this specific account (for now, show all entries)
       // In a real implementation, you'd filter by account ID
@@ -69,7 +69,7 @@ const AccountJournalScreen = ({ route, navigation }) => {
     let wins = 0, losses = 0, breakevens = 0;
 
     entries.forEach(entry => {
-      const result = extractTradeResult(entry.content);
+      const result = extractTradeResult(entry);
       if (result === 'WIN') wins++;
       else if (result === 'LOSS') losses++;
       else if (result === 'BREAKEVEN') breakevens++;
@@ -174,7 +174,17 @@ const AccountJournalScreen = ({ route, navigation }) => {
     return 'Unknown';
   };
 
-  const extractTradeResult = (content) => {
+  const extractTradeResult = (entry) => {
+    // For MT5 entries, use pnl column directly
+    if (entry.mt5_ticket) {
+      if (entry.pnl == null) return 'OPEN';
+      const pnl = Number(entry.pnl);
+      if (pnl > 0.01) return 'WIN';
+      if (pnl < -0.01) return 'LOSS';
+      return 'BREAKEVEN';
+    }
+    const content = entry.content;
+    if (!content || typeof content !== 'string') return 'UNKNOWN';
     if (content.includes('- [x] WIN')) return 'WIN';
     if (content.includes('- [x] LOSS')) return 'LOSS';
     if (content.includes('- [x] BREAKEVEN')) return 'BREAKEVEN';
@@ -191,8 +201,8 @@ const AccountJournalScreen = ({ route, navigation }) => {
   };
 
   const renderEntry = ({ item }) => {
-    const currencyPairs = extractCurrencyPairs(item.content);
-    const tradeResult = extractTradeResult(item.content);
+    const currencyPairs = item.symbol || extractCurrencyPairs(item.content);
+    const tradeResult = extractTradeResult(item);
     const cardColor = getCardColor(tradeResult);
     const contentDateObj = extractContentDate(item.content);
     const displayDateLabel = contentDateObj

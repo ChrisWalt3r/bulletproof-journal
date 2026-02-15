@@ -10,7 +10,6 @@ import {
   Image,
   StatusBar,
   Dimensions,
-  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -27,7 +26,7 @@ const CreateEntryScreen = ({ navigation }) => {
   const { currentAccount } = useAccount();
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  
+
   // Forex Trading Template State
   const [selectedPairs, setSelectedPairs] = useState([]);
   const [tradeDirection, setTradeDirection] = useState('');
@@ -35,14 +34,14 @@ const CreateEntryScreen = ({ navigation }) => {
   const [setupImage, setSetupImage] = useState(null);
   const [riskReward, setRiskReward] = useState('');
   const [notes, setNotes] = useState('');
-  
+
   // Validation State
   const [isFollowingPlan, setIsFollowingPlan] = useState(false);
   const [emotionalState, setEmotionalState] = useState('');
 
   const pairs = ['EURUSD', 'GBPUSD', 'NZDUSD', 'AUDUSD', 'XAUUSD', 'USDJPY', 'USDCAD', 'USDCHF'];
   const tradeDirections = ['BUY', 'SELL'];
-  const tradeResults = ['WIN', 'BREAKEVEN', 'LOSS', 'NO OUTCOME'];
+  const tradeResults = ['WIN', 'BREAKEVEN', 'LOSS'];
 
   // Reset form when screen comes into focus (handles second+ entries)
   useFocusEffect(
@@ -58,11 +57,11 @@ const CreateEntryScreen = ({ navigation }) => {
         setSetupImage(null);
         setRiskReward('');
         setNotes('');
-        
+
         // Reset validation fields
         setIsFollowingPlan(false);
         setEmotionalState('');
-        
+
         console.log('CreateEntryScreen - Form reset completed successfully');
       } catch (error) {
         console.error('CreateEntryScreen - Error during form reset:', error);
@@ -74,7 +73,7 @@ const CreateEntryScreen = ({ navigation }) => {
   const getCurrentDate = () => {
     // Get current date in Ugandan time (EAT - UTC+3)
     const now = new Date();
-    
+
     // Create date formatter for Ugandan timezone
     const ugandanDateString = now.toLocaleDateString('en-US', {
       weekday: 'long',
@@ -83,13 +82,13 @@ const CreateEntryScreen = ({ navigation }) => {
       day: 'numeric',
       timeZone: 'Africa/Kampala'
     });
-    
+
     return ugandanDateString;
   };
 
   const togglePair = (pair) => {
-    setSelectedPairs(prev => 
-      prev.includes(pair) 
+    setSelectedPairs(prev =>
+      prev.includes(pair)
         ? [] // Deselect if already selected
         : [pair] // Select only this pair (replace any previous selection)
     );
@@ -102,23 +101,23 @@ const CreateEntryScreen = ({ navigation }) => {
       const uriParts = sourceUri.split('.');
       const fileType = uriParts[uriParts.length - 1] || 'jpg';
       const filename = `temp_image_${timestamp}.${fileType}`;
-      
+
       const directory = `${FileSystem.documentDirectory}images/`;
-      
+
       // Create images directory if it doesn't exist
       const dirInfo = await FileSystem.getInfoAsync(directory);
       if (!dirInfo.exists) {
         await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
       }
-      
+
       const newPath = `${directory}${filename}`;
-      
+
       // Copy the image immediately to prevent cache expiration issues
       await FileSystem.copyAsync({
         from: sourceUri,
         to: newPath
       });
-      
+
       console.log('CreateEntry - Image copied to permanent storage:', newPath);
       return newPath;
     } catch (error) {
@@ -130,11 +129,11 @@ const CreateEntryScreen = ({ navigation }) => {
   const pickImage = async () => {
     try {
       console.log('CreateEntry - pickImage called');
-      
+
       // Request permission
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       console.log('CreateEntry - Gallery permission result:', permissionResult.granted);
-      
+
       if (permissionResult.granted === false) {
         Alert.alert("Permission Denied", "You need to grant camera roll permissions to upload images.");
         return;
@@ -157,10 +156,10 @@ const CreateEntryScreen = ({ navigation }) => {
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const imageUri = result.assets[0].uri;
         console.log('CreateEntry - Copying image to permanent storage...');
-        
+
         // Copy image immediately to prevent cache expiration
         const permanentUri = await copyImageToPermanentStorage(imageUri);
-        
+
         console.log('CreateEntry - Setting permanent image URI:', permanentUri);
         setSetupImage(permanentUri);
         console.log('CreateEntry - Image state updated successfully');
@@ -177,11 +176,11 @@ const CreateEntryScreen = ({ navigation }) => {
   const takePhoto = async () => {
     try {
       console.log('CreateEntry - takePhoto called');
-      
+
       // Request permission
       const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
       console.log('CreateEntry - Camera permission result:', permissionResult.granted);
-      
+
       if (permissionResult.granted === false) {
         Alert.alert("Permission Denied", "You need to grant camera permissions to take photos.");
         return;
@@ -204,10 +203,10 @@ const CreateEntryScreen = ({ navigation }) => {
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const imageUri = result.assets[0].uri;
         console.log('CreateEntry - Copying camera image to permanent storage...');
-        
+
         // Copy image immediately to prevent cache expiration
         const permanentUri = await copyImageToPermanentStorage(imageUri);
-        
+
         console.log('CreateEntry - Setting permanent camera image URI:', permanentUri);
         setSetupImage(permanentUri);
         console.log('CreateEntry - Image state updated successfully');
@@ -235,9 +234,9 @@ const CreateEntryScreen = ({ navigation }) => {
 
   const generateJournalContent = () => {
     const date = getCurrentDate();
-    
+
     let content = `Date: ${date}\n\n${setupImage ? 'SETUP IMAGE: [Image Attached]' : 'SETUP IMAGE: [No Image]'}\n\n### Pair:\n`;
-    
+
     pairs.forEach(pair => {
       content += `- [${selectedPairs.includes(pair) ? 'x' : ' '}] ${pair}\n`;
     });
@@ -309,20 +308,24 @@ const CreateEntryScreen = ({ navigation }) => {
           imageFilename = uploadResult.filename;
         } catch (error) {
           console.error('Image upload failed:', error);
-          
+
           const errorMessage = error.message || 'Failed to upload image';
-          
+
           const buttons = [
-            { text: 'Cancel', style: 'cancel', onPress: () => {
-              setIsLoading(false);
-              setIsUploading(false);
-            }},
-            { text: 'Continue Without Image', onPress: () => {
-              setIsUploading(false);
-              proceedWithSave(null, null);
-            }},
-            { 
-              text: 'Try Again', 
+            {
+              text: 'Cancel', style: 'cancel', onPress: () => {
+                setIsLoading(false);
+                setIsUploading(false);
+              }
+            },
+            {
+              text: 'Continue Without Image', onPress: () => {
+                setIsUploading(false);
+                proceedWithSave(null, null);
+              }
+            },
+            {
+              text: 'Try Again',
               onPress: () => {
                 setIsLoading(false);
                 setIsUploading(false);
@@ -331,7 +334,7 @@ const CreateEntryScreen = ({ navigation }) => {
               }
             }
           ];
-          
+
           Alert.alert('Image Upload Failed', errorMessage, buttons);
           return;
         } finally {
@@ -359,7 +362,6 @@ const CreateEntryScreen = ({ navigation }) => {
       if (tradeResult === 'WIN') moodRating = 8;
       else if (tradeResult === 'BREAKEVEN') moodRating = 6;
       else if (tradeResult === 'LOSS') moodRating = 3;
-      else if (tradeResult === 'NO OUTCOME') moodRating = 5;
 
       // Get current device time and format it as YYYY-MM-DD HH:MM:SS
       const now = new Date();
@@ -387,10 +389,10 @@ const CreateEntryScreen = ({ navigation }) => {
 
       const response = await journalAPI.createEntry(entryData);
       console.log('CreateEntry - Entry created successfully:', response);
-      
+
       console.log('CreateEntry - Showing success alert and navigating back');
       Alert.alert(
-        'Success!', 
+        'Success!',
         'Your forex trading journal entry has been saved.',
         [
           {
@@ -421,7 +423,6 @@ const CreateEntryScreen = ({ navigation }) => {
       case 'WIN': return '#50C878';
       case 'BREAKEVEN': return '#4A90E2';
       case 'LOSS': return '#FF6B6B';
-      case 'NO OUTCOME': return '#95a5a6';
       default: return '#ddd';
     }
   };
@@ -429,24 +430,24 @@ const CreateEntryScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#667eea" />
-      
+
       {/* Modern Gradient Header */}
       <LinearGradient
         colors={['#667eea', '#764ba2']}
         style={styles.header}
       >
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        
+
         <View style={styles.headerContent}>
           <Text style={styles.title}>New Trade Entry</Text>
           <Text style={styles.subtitle}>Record your trading session</Text>
         </View>
-        
+
         <View style={styles.headerSpacer} />
       </LinearGradient>
 
@@ -456,7 +457,7 @@ const CreateEntryScreen = ({ navigation }) => {
           <Text style={styles.cardTitle}>
             <Ionicons name="camera" size={20} color="#4A90E2" /> Setup Analysis
           </Text>
-          
+
           {setupImage ? (
             <View style={styles.imageWrapper}>
               <Image source={{ uri: setupImage }} style={styles.setupImage} />
@@ -481,7 +482,7 @@ const CreateEntryScreen = ({ navigation }) => {
           <Text style={styles.cardTitle}>
             <Ionicons name="stats-chart" size={20} color="#4A90E2" /> Trading Information
           </Text>
-          
+
           {/* Currency Pairs */}
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>Currency Pair</Text>
@@ -522,10 +523,10 @@ const CreateEntryScreen = ({ navigation }) => {
                   ]}
                   onPress={() => setTradeDirection(direction)}
                 >
-                  <Ionicons 
-                    name={direction === 'BUY' ? 'trending-up' : 'trending-down'} 
-                    size={20} 
-                    color={tradeDirection === direction ? '#fff' : '#666'} 
+                  <Ionicons
+                    name={direction === 'BUY' ? 'trending-up' : 'trending-down'}
+                    size={20}
+                    color={tradeDirection === direction ? '#fff' : '#666'}
                   />
                   <Text style={[
                     styles.segmentText,
@@ -563,7 +564,7 @@ const CreateEntryScreen = ({ navigation }) => {
           <Text style={styles.cardTitle}>
             <Ionicons name="pulse" size={20} color="#4A90E2" /> Trade Outcome
           </Text>
-          
+
           <View style={styles.resultGrid}>
             {tradeResults.map((result) => (
               <TouchableOpacity
@@ -575,13 +576,13 @@ const CreateEntryScreen = ({ navigation }) => {
                 onPress={() => setTradeResult(result)}
               >
                 <View style={[styles.resultIcon, { backgroundColor: getResultColor(result) }]}>
-                  <Ionicons 
+                  <Ionicons
                     name={
-                      result === 'WIN' ? 'trophy' : 
-                      result === 'BREAKEVEN' ? 'remove' : 'close'
-                    } 
-                    size={24} 
-                    color="#fff" 
+                      result === 'WIN' ? 'trophy' :
+                        result === 'BREAKEVEN' ? 'remove' : 'close'
+                    }
+                    size={24}
+                    color="#fff"
                   />
                 </View>
                 <Text style={[
@@ -600,7 +601,7 @@ const CreateEntryScreen = ({ navigation }) => {
           <Text style={styles.cardTitle}>
             <Ionicons name="document-text" size={20} color="#4A90E2" /> Notes
           </Text>
-          
+
           <View style={styles.textAreaWrapper}>
             <TextInput
               style={styles.textArea}
@@ -620,10 +621,10 @@ const CreateEntryScreen = ({ navigation }) => {
           <Text style={styles.cardTitle}>
             <Ionicons name="shield-checkmark" size={20} color="#4A90E2" /> Trade Validation
           </Text>
-          
+
           {/* Following Plan */}
-          <TouchableOpacity 
-            style={styles.checkboxRow} 
+          <TouchableOpacity
+            style={styles.checkboxRow}
             onPress={() => setIsFollowingPlan(!isFollowingPlan)}
           >
             <View style={[styles.checkbox, isFollowingPlan && styles.checkboxChecked]}>
@@ -646,7 +647,7 @@ const CreateEntryScreen = ({ navigation }) => {
         </View>
 
         {/* Save Button */}
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.saveButton, isLoading && styles.saveButtonDisabled]}
           onPress={handleSave}
           disabled={isLoading}
@@ -662,9 +663,9 @@ const CreateEntryScreen = ({ navigation }) => {
                 <Ionicons name="checkmark-circle" size={20} color="#fff" />
               )}
               <Text style={styles.saveButtonText}>
-                {isUploading ? 'Uploading Image...' : 
-                 isLoading ? 'Saving Entry...' : 
-                 'Save Trading Journal'}
+                {isUploading ? 'Uploading Image...' :
+                  isLoading ? 'Saving Entry...' :
+                    'Save Trading Journal'}
               </Text>
             </View>
           </LinearGradient>
@@ -741,7 +742,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  
+
   // Image Upload Styles
   uploadCard: {
     borderWidth: 2,
@@ -798,7 +799,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 8,
   },
-  
+
   // Field Group Styles
   fieldGroup: {
     marginBottom: 24,
@@ -809,7 +810,7 @@ const styles = StyleSheet.create({
     color: '#495057',
     marginBottom: 12,
   },
-  
+
   // Chip Styles (Currency Pairs)
   chipContainer: {
     flexDirection: 'row',
@@ -844,7 +845,7 @@ const styles = StyleSheet.create({
   chipIcon: {
     marginLeft: 6,
   },
-  
+
   // Segmented Control (Trade Direction)
   segmentedControl: {
     flexDirection: 'row',
@@ -878,7 +879,7 @@ const styles = StyleSheet.create({
   segmentTextSelected: {
     color: '#fff',
   },
-  
+
   // Risk Reward Styles
   rrWrapper: {
     alignItems: 'center',
@@ -919,7 +920,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontStyle: 'italic',
   },
-  
+
   // Result Cards (Trade Outcome)
   resultGrid: {
     flexDirection: 'column',
@@ -957,7 +958,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#495057',
   },
-  
+
   // Text Area Styles
   textAreaWrapper: {
     backgroundColor: '#f8f9fa',
@@ -973,7 +974,7 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: 'top',
   },
-  
+
   // Validation Styles
   checkboxRow: {
     flexDirection: 'row',

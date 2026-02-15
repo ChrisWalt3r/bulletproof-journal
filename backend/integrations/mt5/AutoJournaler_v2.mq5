@@ -5,14 +5,14 @@
 //+------------------------------------------------------------------+
 #property copyright "Bulletproof Journal"
 #property link      "https://yourjournalapp.com"
-#property version   "3.00"
+#property version   "3.01"
 #property description "Universal Auto-Journaler: captures ALL trades across all"
 #property description "symbols (forex, indices, commodities, etc.) from a single"
 #property description "chart. Attach to any ONE chart — it monitors the entire account."
 #property strict
 
 // --- INPUTS ---
-input string   InpApiUrl      = "http://10.66.43.129:3000/api/mt5/webhook"; // API Webhook URL
+input string   InpApiUrl      = "https://bulletproof-journal-1.onrender.com/api/mt5/webhook"; // API Webhook URL
 input string   InpApiSecret   = "BulletproofTrades2026!";                 // Webhook Secret
 input int      InpAccountId   = 1;                                // Journal Account ID
 input int      InpWidth       = 1366;                             // Screenshot Width
@@ -26,8 +26,14 @@ const string msg_base64_table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstu
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   Print("AutoJournaler V3 (Universal) Started via Webhook: ", InpApiUrl);
-   Print("Monitoring ALL symbols on this account from a single chart.");
+   Print("============================================");
+   Print("  AutoJournaler v3.01 (Universal) Started");
+   Print("  Webhook: ", InpApiUrl);
+   Print("  Account ID: ", InpAccountId);
+   Print("  Monitoring: ALL symbols on this account");
+   Print("  Attach to ONE chart only — it captures");
+   Print("  forex, indices, commodities, crypto, etc.");
+   Print("============================================");
    return(INIT_SUCCEEDED);
 }
 

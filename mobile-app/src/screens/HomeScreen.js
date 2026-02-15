@@ -9,7 +9,6 @@ import {
   Alert,
   Dimensions,
   StatusBar,
-  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -97,7 +96,7 @@ const HomeScreen = ({ navigation }) => {
       const now = new Date();
       const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-      let wins = 0, losses = 0, breakevens = 0, noOutcomes = 0;
+      let wins = 0, losses = 0, breakevens = 0;
       let thisWeekCount = 0;
       const recentTrades = [];
 
@@ -123,7 +122,6 @@ const HomeScreen = ({ navigation }) => {
         if (tradeResult === 'WIN') wins++;
         else if (tradeResult === 'LOSS') losses++;
         else if (tradeResult === 'BREAKEVEN') breakevens++;
-        else if (tradeResult === 'NO OUTCOME') noOutcomes++;
 
         const contentDate = extractContentDate(entry.content);
         const entryDate = contentDate || parseBackendTimestamp(entry.created_at);
@@ -140,7 +138,7 @@ const HomeScreen = ({ navigation }) => {
         }
       });
 
-      const totalTrades = wins + losses + breakevens + noOutcomes;
+      const totalTrades = wins + losses + breakevens;
       const winRate = totalTrades > 0 ? ((wins / totalTrades) * 100) : 0;
 
       setAnalytics({
@@ -150,7 +148,6 @@ const HomeScreen = ({ navigation }) => {
         wins,
         losses,
         breakevens,
-        noOutcomes,
         recentTrades,
       });
 
@@ -178,7 +175,6 @@ const HomeScreen = ({ navigation }) => {
     if (content.includes('- [x] WIN')) return 'WIN';
     if (content.includes('- [x] LOSS')) return 'LOSS';
     if (content.includes('- [x] BREAKEVEN')) return 'BREAKEVEN';
-    if (content.includes('- [x] NO OUTCOME')) return 'NO OUTCOME';
     return 'UNKNOWN';
   };
 
@@ -204,13 +200,13 @@ const HomeScreen = ({ navigation }) => {
         }
       }
     }
-    
+
     // Fallback: try to extract from MT5 title format "MT5: BUY EURUSD" or "MT5 Exit: EURUSD"
     const titleMatch = content.match(/MT5(?:\s+Exit)?:\s+(?:BUY|SELL)?\s*([A-Z]+)/i);
     if (titleMatch) {
       return titleMatch[1];
     }
-    
+
     return 'Unknown';
   };
 
@@ -219,7 +215,6 @@ const HomeScreen = ({ navigation }) => {
       case 'WIN': return '#50C878';
       case 'LOSS': return '#FF6B6B';
       case 'BREAKEVEN': return '#4A90E2';
-      case 'NO OUTCOME': return '#95a5a6';
       default: return '#666';
     }
   };
@@ -405,7 +400,7 @@ const HomeScreen = ({ navigation }) => {
           <View style={styles.breakdownContainer}>
             <TouchableOpacity
               style={styles.breakdownItem}
-              onPress={() => navigation.navigate('Journal', { filter: 'WIN' })}
+              onPress={() => navigation.navigate('Journal', { screen: 'JournalList', params: { filter: 'WIN' } })}
             >
               <View style={[styles.breakdownIcon, { backgroundColor: '#00b09b' }]}>
                 <Ionicons name="checkmark-circle" size={20} color="#fff" />
@@ -416,7 +411,7 @@ const HomeScreen = ({ navigation }) => {
 
             <TouchableOpacity
               style={styles.breakdownItem}
-              onPress={() => navigation.navigate('Journal', { filter: 'LOSS' })}
+              onPress={() => navigation.navigate('Journal', { screen: 'JournalList', params: { filter: 'LOSS' } })}
             >
               <View style={[styles.breakdownIcon, { backgroundColor: '#ff5858' }]}>
                 <Ionicons name="close-circle" size={20} color="#fff" />
@@ -427,24 +422,13 @@ const HomeScreen = ({ navigation }) => {
 
             <TouchableOpacity
               style={styles.breakdownItem}
-              onPress={() => navigation.navigate('Journal', { filter: 'BREAKEVEN' })}
+              onPress={() => navigation.navigate('Journal', { screen: 'JournalList', params: { filter: 'BREAKEVEN' } })}
             >
               <View style={[styles.breakdownIcon, { backgroundColor: '#4facfe' }]}>
                 <Ionicons name="remove-circle" size={20} color="#fff" />
               </View>
               <Text style={styles.breakdownNumber}>{analytics.breakevens}</Text>
               <Text style={styles.breakdownLabel}>Breakeven</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.breakdownItem}
-              onPress={() => navigation.navigate('Journal', { filter: 'NO OUTCOME' })}
-            >
-              <View style={[styles.breakdownIcon, { backgroundColor: '#95a5a6' }]}>
-                <Ionicons name="help-circle" size={20} color="#fff" />
-              </View>
-              <Text style={styles.breakdownNumber}>{analytics.noOutcomes}</Text>
-              <Text style={styles.breakdownLabel}>No Outcome</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -506,11 +490,13 @@ const HomeScreen = ({ navigation }) => {
                       )}
                     </View>
                     <Text style={styles.modernTradeDate}>
-                      {trade.date.toLocaleDateString('en-US', {
+                      {trade.date ? trade.date.toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
                         timeZone: 'Africa/Kampala'
-                      })}
+                      }) : 'No Date'}
                     </Text>
                   </View>
                 </View>

@@ -1,17 +1,29 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 
 const SignupScreen = ({ navigation }) => {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const { signUp } = useAuth();
 
     const handleSignup = async () => {
-        if (!email || !password || !name) {
+        if (!email || !password || !name || !confirmPassword) {
             Alert.alert('Error', 'Please fill in all fields');
+            return;
+        }
+        if (password !== confirmPassword) {
+            Alert.alert('Error', 'Passwords do not match');
+            return;
+        }
+        if (password.length < 6) {
+            Alert.alert('Error', 'Password must be at least 6 characters');
             return;
         }
         setLoading(true);
@@ -33,24 +45,59 @@ const SignupScreen = ({ navigation }) => {
                 <TextInput
                     style={styles.input}
                     placeholder="Full Name"
+                    placeholderTextColor="#999"
                     value={name}
                     onChangeText={setName}
                 />
                 <TextInput
                     style={styles.input}
                     placeholder="Email"
+                    placeholderTextColor="#999"
                     value={email}
                     onChangeText={setEmail}
                     autoCapitalize="none"
                     keyboardType="email-address"
                 />
-                <TextInput
-                    style={styles.input}
-                    placeholder="Password"
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry
-                />
+                <View style={styles.passwordContainer}>
+                    <TextInput
+                        style={styles.passwordInput}
+                        placeholder="Password"
+                        placeholderTextColor="#999"
+                        value={password}
+                        onChangeText={setPassword}
+                        secureTextEntry={!showPassword}
+                    />
+                    <TouchableOpacity
+                        style={styles.eyeButton}
+                        onPress={() => setShowPassword(!showPassword)}
+                    >
+                        <Ionicons
+                            name={showPassword ? 'eye-off' : 'eye'}
+                            size={22}
+                            color="#999"
+                        />
+                    </TouchableOpacity>
+                </View>
+                <View style={styles.passwordContainer}>
+                    <TextInput
+                        style={styles.passwordInput}
+                        placeholder="Confirm Password"
+                        placeholderTextColor="#999"
+                        value={confirmPassword}
+                        onChangeText={setConfirmPassword}
+                        secureTextEntry={!showConfirmPassword}
+                    />
+                    <TouchableOpacity
+                        style={styles.eyeButton}
+                        onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                    >
+                        <Ionicons
+                            name={showConfirmPassword ? 'eye-off' : 'eye'}
+                            size={22}
+                            color="#999"
+                        />
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <TouchableOpacity style={styles.button} onPress={handleSignup} disabled={loading}>
@@ -93,6 +140,25 @@ const styles = StyleSheet.create({
         fontSize: 16,
         borderWidth: 1,
         borderColor: '#E1E1E1',
+        color: '#333',
+    },
+    passwordContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        borderRadius: 10,
+        marginBottom: 15,
+        borderWidth: 1,
+        borderColor: '#E1E1E1',
+    },
+    passwordInput: {
+        flex: 1,
+        padding: 15,
+        fontSize: 16,
+        color: '#333',
+    },
+    eyeButton: {
+        padding: 15,
     },
     button: {
         backgroundColor: '#4A90E2',
