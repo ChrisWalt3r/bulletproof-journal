@@ -316,6 +316,19 @@ const JournalListScreen = ({ navigation, route }) => {
                   <Text style={{ fontSize: 10, color: '#2E7D32', fontWeight: 'bold' }}>PLAN WIN</Text>
                 </View>
               )}
+              {item.following_plan === true || item.following_plan === 'true' ? (
+                <View style={{ backgroundColor: '#E8F5E9', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 4, marginRight: 6 }}>
+                  <Text style={{ fontSize: 10, color: '#2E7D32', fontWeight: 'bold' }}>ON PLAN</Text>
+                </View>
+              ) : item.following_plan === false || item.following_plan === 'false' ? (
+                <View style={{ backgroundColor: '#FFEBEE', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 4, marginRight: 6 }}>
+                  <Text style={{ fontSize: 10, color: '#C62828', fontWeight: 'bold' }}>OFF PLAN</Text>
+                </View>
+              ) : (
+                <View style={{ backgroundColor: '#FFF3E0', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 4, marginRight: 6 }}>
+                  <Text style={{ fontSize: 10, color: '#E65100', fontWeight: 'bold' }}>NEEDS REVIEW</Text>
+                </View>
+              )}
             </View>
           </View>
           <View style={styles.entryMeta}>

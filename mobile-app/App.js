@@ -15,7 +15,6 @@ import { initializeApi } from './src/services/api';
 import HomeScreen from './src/screens/HomeScreen';
 import JournalListScreen from './src/screens/JournalListScreen';
 import CreateEntryScreen from './src/screens/CreateEntryScreen';
-import EditEntryScreen from './src/screens/EditEntryScreen';
 import EntryDetailScreen from './src/screens/EntryDetailScreen';
 import CriteriaScreen from './src/screens/CriteriaScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -37,7 +36,6 @@ function JournalStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="JournalList" component={JournalListScreen} />
       <Stack.Screen name="CreateEntry" component={CreateEntryScreen} />
-      <Stack.Screen name="EditEntry" component={EditEntryScreen} />
       <Stack.Screen name="EntryDetail" component={EntryDetailScreen} />
     </Stack.Navigator>
   );
@@ -53,7 +51,6 @@ function SettingsStack() {
       <Stack.Screen name="AccountGrowth" component={AccountGrowthScreen} />
       <Stack.Screen name="EntryDetail" component={EntryDetailScreen} />
       <Stack.Screen name="CreateEntry" component={CreateEntryScreen} />
-      <Stack.Screen name="EditEntry" component={EditEntryScreen} />
     </Stack.Navigator>
   );
 }

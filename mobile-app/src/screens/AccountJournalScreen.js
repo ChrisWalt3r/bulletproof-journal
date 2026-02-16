@@ -223,9 +223,31 @@ const AccountJournalScreen = ({ route, navigation }) => {
         onPress={() => navigation.navigate('EntryDetail', { entry: item })}
       >
         <View style={styles.entryHeader}>
-          <Text style={styles.entryTitle} numberOfLines={1}>
-            {currencyPairs}
-          </Text>
+          <View style={{ flex: 1, marginRight: 10 }}>
+            <Text style={styles.entryTitle} numberOfLines={1}>
+              {currencyPairs}
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+              {item.mt5_ticket && (
+                <View style={{ backgroundColor: '#E3F2FD', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 4, marginRight: 6 }}>
+                  <Text style={{ fontSize: 10, color: '#1976D2', fontWeight: 'bold' }}>MT5 AUTO</Text>
+                </View>
+              )}
+              {item.following_plan === true || item.following_plan === 'true' ? (
+                <View style={{ backgroundColor: '#E8F5E9', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 4, marginRight: 6 }}>
+                  <Text style={{ fontSize: 10, color: '#2E7D32', fontWeight: 'bold' }}>ON PLAN</Text>
+                </View>
+              ) : item.following_plan === false || item.following_plan === 'false' ? (
+                <View style={{ backgroundColor: '#FFEBEE', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 4, marginRight: 6 }}>
+                  <Text style={{ fontSize: 10, color: '#C62828', fontWeight: 'bold' }}>OFF PLAN</Text>
+                </View>
+              ) : (
+                <View style={{ backgroundColor: '#FFF3E0', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 4, marginRight: 6 }}>
+                  <Text style={{ fontSize: 10, color: '#E65100', fontWeight: 'bold' }}>NEEDS REVIEW</Text>
+                </View>
+              )}
+            </View>
+          </View>
           <View style={styles.entryMeta}>
             <Text style={[styles.tradeResult, { color: cardColor }]}>
               {tradeResult}

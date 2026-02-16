@@ -280,17 +280,6 @@ const CreateEntryScreen = ({ navigation }) => {
       return;
     }
 
-    // New Validation Checks
-    if (!isFollowingPlan) {
-      Alert.alert('Validation Error', 'You must confirm that you are following your trading plan.');
-      return;
-    }
-
-    if (!emotionalState.trim()) {
-      Alert.alert('Validation Error', 'Please describe your emotional state.');
-      return;
-    }
-
     setIsLoading(true);
 
     try {

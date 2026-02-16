@@ -10,7 +10,8 @@ import {
   Modal,
   StatusBar,
   Dimensions,
-  FlatList,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -327,50 +328,7 @@ const CriteriaScreen = () => {
 
 
 
-  const RenderCriteriaItem = ({ item }) => {
-    const isChecked = item.checked;
 
-    return (
-      <View style={[styles.criterionCard, { marginHorizontal: 16 }]}>
-        <TouchableOpacity
-          style={[styles.checkbox, isChecked && styles.checkboxChecked]}
-          onPress={() => handleToggleCriterion(item.id, isChecked)}
-        >
-          {isChecked && <Ionicons name="checkmark" size={16} color="#fff" />}
-        </TouchableOpacity>
-
-        <View style={styles.criterionContent}>
-          {editingCriterionId === item.id ? (
-            <View style={styles.editContainer}>
-              <TextInput
-                style={styles.editInput}
-                value={editingCriterionText}
-                onChangeText={setEditingCriterionText}
-                autoFocus
-                onBlur={handleSaveCriterionEdit}
-                onSubmitEditing={handleSaveCriterionEdit}
-              />
-            </View>
-          ) : (
-            <TouchableOpacity
-              onPress={() => startEditingCriterion(item)}
-            >
-              <Text style={[styles.criterionText, isChecked && styles.criterionTextChecked]}>
-                {item.text}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => handleDeleteCriterion(item.id)}
-        >
-          <Ionicons name="close-circle-outline" size={20} color="#ff6b6b" />
-        </TouchableOpacity>
-      </View>
-    );
-  };
 
   const addMindsetEntry = () => {
     const newEntry = {
@@ -457,7 +415,7 @@ const CriteriaScreen = () => {
     </TouchableOpacity>
   );
 
-  const renderHeader = () => (
+  const renderHeader = (
     <View>
       <LinearGradient
         colors={['#667eea', '#764ba2']}
@@ -505,9 +463,7 @@ const CriteriaScreen = () => {
                 {plan.name}
               </Text>
 
-              {activePlanId === plan.id && (
-                <View style={styles.activeTabIndicator} />
-              )}
+
             </TouchableOpacity>
           ))}
 
@@ -643,7 +599,7 @@ const CriteriaScreen = () => {
     </View>
   );
 
-  const renderFooter = () => (
+  const renderFooter = (
     <View style={{ paddingHorizontal: 16 }}>
       {/* Mindset Section */}
       <View style={styles.mindsetSection}>
@@ -783,14 +739,63 @@ const CriteriaScreen = () => {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#667eea" />
 
-      <FlatList
-        data={activePlanCriteria}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => <RenderCriteriaItem item={item} />}
-        ListHeaderComponent={renderHeader}
-        ListFooterComponent={renderFooter}
-        contentContainerStyle={{ paddingBottom: 20 }}
-      />
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: 20 }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="none"
+        >
+          {renderHeader}
+
+          {activePlanCriteria.map((item) => {
+            const isChecked = item.checked;
+            return (
+              <View key={item.id.toString()} style={[styles.criterionCard, { marginHorizontal: 16 }]}>
+                <TouchableOpacity
+                  style={[styles.checkbox, isChecked && styles.checkboxChecked]}
+                  onPress={() => handleToggleCriterion(item.id, isChecked)}
+                >
+                  {isChecked && <Ionicons name="checkmark" size={16} color="#fff" />}
+                </TouchableOpacity>
+
+                <View style={styles.criterionContent}>
+                  {editingCriterionId === item.id ? (
+                    <View style={styles.editContainer}>
+                      <TextInput
+                        style={styles.editInput}
+                        value={editingCriterionText}
+                        onChangeText={setEditingCriterionText}
+                        autoFocus
+                        onBlur={handleSaveCriterionEdit}
+                        onSubmitEditing={handleSaveCriterionEdit}
+                      />
+                    </View>
+                  ) : (
+                    <TouchableOpacity onPress={() => startEditingCriterion(item)}>
+                      <Text style={[styles.criterionText, isChecked && styles.criterionTextChecked]}>
+                        {item.text}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => handleDeleteCriterion(item.id)}
+                >
+                  <Ionicons name="close-circle-outline" size={20} color="#ff6b6b" />
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+
+          {renderFooter}
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Tooltip Modal */}
       <Modal
@@ -1093,6 +1098,7 @@ const styles = StyleSheet.create({
   },
   criterionContent: {
     flex: 1,
+    marginLeft: 14,
   },
   criterionText: {
     fontSize: 15,
@@ -1120,9 +1126,13 @@ const styles = StyleSheet.create({
   editInput: {
     flex: 1,
     fontSize: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#667eea',
-    paddingBottom: 4,
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#667eea',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#2c3e50',
   },
   editActions: {
     flexDirection: 'row',

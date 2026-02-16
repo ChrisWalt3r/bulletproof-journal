@@ -115,7 +115,7 @@ const CalendarScreen = ({ navigation }) => {
             entriesByDate[dateKey] = {
               entries: [],
               trades: { WIN: 0, LOSS: 0, BREAKEVEN: 0, OPEN: 0 },
-              plan: { FOLLOWED: 0, NOT_FOLLOWED: 0 }
+              plan: { FOLLOWED: 0, NOT_FOLLOWED: 0, NOT_RECORDED: 0 }
             };
           }
           entriesByDate[dateKey].entries.push(entry);
@@ -126,11 +126,13 @@ const CalendarScreen = ({ navigation }) => {
             entriesByDate[dateKey].trades[tradeResult]++;
           }
 
-          // Track plan adherence
+          // Track plan adherence (3 states)
           if (entry.following_plan === true || entry.following_plan === 'true') {
             entriesByDate[dateKey].plan.FOLLOWED++;
-          } else {
+          } else if (entry.following_plan === false || entry.following_plan === 'false') {
             entriesByDate[dateKey].plan.NOT_FOLLOWED++;
+          } else {
+            entriesByDate[dateKey].plan.NOT_RECORDED++;
           }
         }
       });
@@ -285,12 +287,16 @@ const CalendarScreen = ({ navigation }) => {
       const { plan } = dayEntries;
       const hasFollowed = plan.FOLLOWED > 0;
       const hasNotFollowed = plan.NOT_FOLLOWED > 0;
+      const hasNotRecorded = plan.NOT_RECORDED > 0;
 
       const types = [];
-      if (hasFollowed) types.push({ color: '#50C878' });    // Green - followed plan
-      if (hasNotFollowed) types.push({ color: '#FF6B6B' }); // Red - didn't follow
+      if (hasFollowed) types.push({ color: '#50C878' });       // Green - followed plan
+      if (hasNotFollowed) types.push({ color: '#FF6B6B' });    // Red - didn't follow
+      if (hasNotRecorded) types.push({ color: '#FFA500' });    // Yellow/Orange - not recorded
 
-      if (types.length === 2) {
+      if (types.length >= 3) {
+        return { type: 'triple', primaryColor: types[0].color, secondaryColor: types[1].color, tertiaryColor: types[2].color };
+      } else if (types.length === 2) {
         return { type: 'mixed', primaryColor: types[0].color, secondaryColor: types[1].color };
       } else if (types.length === 1) {
         return { type: 'single', primaryColor: types[0].color };
@@ -341,9 +347,10 @@ const CalendarScreen = ({ navigation }) => {
 
     if (viewMode === 'PLAN') {
       const { plan } = dayEntries;
-      if (plan.FOLLOWED > 0 && plan.NOT_FOLLOWED === 0) return '#50C878'; // All followed
-      if (plan.NOT_FOLLOWED > 0 && plan.FOLLOWED === 0) return '#FF6B6B'; // None followed
-      if (plan.FOLLOWED > 0 && plan.NOT_FOLLOWED > 0) return '#FFA500'; // Mixed
+      if (plan.FOLLOWED > 0 && plan.NOT_FOLLOWED === 0 && plan.NOT_RECORDED === 0) return '#50C878'; // All followed
+      if (plan.NOT_FOLLOWED > 0 && plan.FOLLOWED === 0 && plan.NOT_RECORDED === 0) return '#FF6B6B'; // None followed
+      if (plan.NOT_RECORDED > 0 && plan.FOLLOWED === 0 && plan.NOT_FOLLOWED === 0) return '#FFA500'; // All not recorded
+      if (plan.FOLLOWED > 0 || plan.NOT_FOLLOWED > 0 || plan.NOT_RECORDED > 0) return '#FFA500'; // Mixed
       return '#f0f0f0';
     }
 
@@ -510,6 +517,43 @@ const CalendarScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
+        {/* Monthly Plan Adherence Stats (only in PLAN mode) */}
+        {viewMode === 'PLAN' && (() => {
+          const allEntries = Object.values(journalEntries);
+          let followed = 0, notFollowed = 0, notRecorded = 0;
+          allEntries.forEach(day => {
+            followed += day.plan.FOLLOWED;
+            notFollowed += day.plan.NOT_FOLLOWED;
+            notRecorded += day.plan.NOT_RECORDED;
+          });
+          const totalTrades = followed + notFollowed + notRecorded;
+          const adherenceRate = totalTrades > 0 ? Math.round((followed / totalTrades) * 100) : 0;
+
+          return totalTrades > 0 ? (
+            <View style={styles.planStatsCard}>
+              <Text style={styles.planStatsTitle}>Monthly Plan Adherence</Text>
+              <View style={styles.planStatsRow}>
+                <View style={styles.planStatItem}>
+                  <Text style={[styles.planStatNumber, { color: '#50C878' }]}>{followed}</Text>
+                  <Text style={styles.planStatLabel}>Followed</Text>
+                </View>
+                <View style={styles.planStatItem}>
+                  <Text style={[styles.planStatNumber, { color: '#FF6B6B' }]}>{notFollowed}</Text>
+                  <Text style={styles.planStatLabel}>Off Plan</Text>
+                </View>
+                <View style={styles.planStatItem}>
+                  <Text style={[styles.planStatNumber, { color: '#FFA500' }]}>{notRecorded}</Text>
+                  <Text style={styles.planStatLabel}>Not Recorded</Text>
+                </View>
+                <View style={[styles.planStatItem, styles.planStatHighlight]}>
+                  <Text style={[styles.planStatNumber, { color: adherenceRate >= 70 ? '#50C878' : adherenceRate >= 40 ? '#FFA500' : '#FF6B6B' }]}>{adherenceRate}%</Text>
+                  <Text style={styles.planStatLabel}>Adherence</Text>
+                </View>
+              </View>
+            </View>
+          ) : null;
+        })()}
+
         {/* Calendar Header */}
         <View style={styles.calendarHeader}>
           <TouchableOpacity onPress={goToPreviousMonth} style={styles.navButton}>
@@ -567,13 +611,17 @@ const CalendarScreen = ({ navigation }) => {
               {selectedDateEntries.map((entry, index) => {
                 const outcome = getEntryOutcome(entry);
                 const pair = getEntryPair(entry);
-                const planFollowed = entry.following_plan === true || entry.following_plan === 'true';
+                const planStatus = (entry.following_plan === true || entry.following_plan === 'true')
+                  ? 'FOLLOWED'
+                  : (entry.following_plan === false || entry.following_plan === 'false')
+                    ? 'NOT FOLLOWED'
+                    : 'NEEDS REVIEW';
 
                 // Badge info depends on view mode
                 let badgeText, badgeColor;
                 if (viewMode === 'PLAN') {
-                  badgeText = planFollowed ? 'FOLLOWED' : 'NOT FOLLOWED';
-                  badgeColor = planFollowed ? '#50C878' : '#FF6B6B';
+                  badgeText = planStatus;
+                  badgeColor = planStatus === 'FOLLOWED' ? '#50C878' : planStatus === 'NOT FOLLOWED' ? '#FF6B6B' : '#FFA500';
                 } else {
                   badgeText = outcome;
                   badgeColor = outcome === 'WIN' ? '#50C878' : outcome === 'LOSS' ? '#FF6B6B' : outcome === 'BREAKEVEN' ? '#4A90E2' : '#FFA500';
@@ -647,6 +695,10 @@ const CalendarScreen = ({ navigation }) => {
                 <View style={styles.legendItem}>
                   <View style={[styles.legendDot, { backgroundColor: '#FF6B6B' }]} />
                   <Text style={styles.legendText}>Didn't Follow Plan</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#FFA500' }]} />
+                  <Text style={styles.legendText}>Not Recorded</Text>
                 </View>
               </>
             )}
@@ -1084,6 +1136,47 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '500',
     maxWidth: 80,
+  },
+  planStatsCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  planStatsTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  planStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  planStatItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  planStatHighlight: {
+    borderLeftWidth: 1,
+    borderLeftColor: '#e9ecef',
+    paddingLeft: 8,
+  },
+  planStatNumber: {
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  planStatLabel: {
+    fontSize: 11,
+    color: '#6c757d',
+    fontWeight: '600',
+    marginTop: 2,
   },
 });
 
