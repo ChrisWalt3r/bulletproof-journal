@@ -133,6 +133,9 @@ const runLiveMigrations = async () => {
     `ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS asset_type TEXT DEFAULT 'forex'`,
     // Add gallery_images column for up to 5 user-uploaded images
     `ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS gallery_images JSONB DEFAULT '[]'::jsonb`,
+    // Fix: reset all unreviewed MT5 entries to NULL (NEEDS REVIEW) instead of false (OFF PLAN)
+    // Only affects MT5 entries that have never been explicitly reviewed
+    `UPDATE journal_entries SET following_plan = NULL WHERE mt5_ticket IS NOT NULL AND following_plan = false AND emotional_state IS NULL`,
   ];
 
   for (const migration of migrations) {
