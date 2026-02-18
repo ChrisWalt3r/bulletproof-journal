@@ -74,8 +74,9 @@ const uploadImage = async (fileBuffer, originalName, mimetype, userId) => {
     const extension = path.extname(originalName);
     const filename = `${userId}/${timestamp}-${randomString}${extension}`;
 
-    // Upload to Supabase Storage
-    const { data, error } = await supabase.storage
+    // Upload to Supabase Storage (use admin client to bypass RLS)
+    const client = supabaseAdmin || supabase;
+    const { data, error } = await client.storage
       .from(BUCKET_NAME)
       .upload(filename, fileBuffer, {
         contentType: mimetype,
@@ -89,7 +90,7 @@ const uploadImage = async (fileBuffer, originalName, mimetype, userId) => {
     }
 
     // Get public URL
-    const { data: { publicUrl } } = supabase.storage
+    const { data: { publicUrl } } = client.storage
       .from(BUCKET_NAME)
       .getPublicUrl(filename);
 
