@@ -49,6 +49,7 @@ const EntryDetailScreen = ({ route, navigation }) => {
   const [notes, setNotes] = useState('');
   const [isFollowingPlan, setIsFollowingPlan] = useState(false);
   const [emotionalState, setEmotionalState] = useState('');
+  const [galleryImages, setGalleryImages] = useState([]);
 
   const pairsList = ['EURUSD', 'GBPUSD', 'NZDUSD', 'AUDUSD', 'XAUUSD', 'USDJPY', 'USDCAD', 'USDCHF'];
   const tradeDirections = ['BUY', 'SELL'];
@@ -61,6 +62,16 @@ const EntryDetailScreen = ({ route, navigation }) => {
       setIsFollowingPlan(!!entry.following_plan);
       setEmotionalState(entry.emotional_state || '');
       setSetupImage(entry.before_image_url || entry.image_url || null);
+
+      // Load gallery images
+      if (entry.gallery_images) {
+        try {
+          const imgs = typeof entry.gallery_images === 'string' ? JSON.parse(entry.gallery_images) : entry.gallery_images;
+          setGalleryImages(Array.isArray(imgs) ? imgs : []);
+        } catch { setGalleryImages([]); }
+      } else {
+        setGalleryImages([]);
+      }
 
       if (entry.symbol) setSelectedPairs([entry.symbol]);
       if (entry.direction) setTradeDirection(entry.direction);
@@ -198,6 +209,56 @@ const EntryDetailScreen = ({ route, navigation }) => {
     Alert.alert('Image Options', 'Choose how to manage your setup image', opts);
   };
 
+  // ---- Gallery image handling ----
+  const MAX_GALLERY = 5;
+
+  const pickGalleryImage = async () => {
+    if (galleryImages.length >= MAX_GALLERY) {
+      Alert.alert('Limit Reached', `You can add up to ${MAX_GALLERY} images.`);
+      return;
+    }
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) { Alert.alert('Permission Denied', 'Grant gallery permissions.'); return; }
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: false, quality: 0.8 });
+      if (!result.canceled && result.assets?.length > 0) {
+        const uri = await copyImageToPermanentStorage(result.assets[0].uri);
+        setGalleryImages(prev => [...prev, uri]);
+      }
+    } catch (e) { Alert.alert('Error', e.message); }
+  };
+
+  const takeGalleryPhoto = async () => {
+    if (galleryImages.length >= MAX_GALLERY) {
+      Alert.alert('Limit Reached', `You can add up to ${MAX_GALLERY} images.`);
+      return;
+    }
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) { Alert.alert('Permission Denied', 'Grant camera permissions.'); return; }
+      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [4, 3], quality: 0.8 });
+      if (!result.canceled && result.assets?.length > 0) {
+        const uri = await copyImageToPermanentStorage(result.assets[0].uri);
+        setGalleryImages(prev => [...prev, uri]);
+      }
+    } catch (e) { Alert.alert('Error', e.message); }
+  };
+
+  const showGalleryImagePicker = () => {
+    Alert.alert('Add Image', 'Choose source', [
+      { text: 'Camera', onPress: takeGalleryPhoto },
+      { text: 'Gallery', onPress: pickGalleryImage },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const removeGalleryImage = (index) => {
+    Alert.alert('Remove Image', 'Remove this image from gallery?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => setGalleryImages(prev => prev.filter((_, i) => i !== index)) },
+    ]);
+  };
+
   // ---- Save ----
   const generateJournalContent = () => {
     const date = new Date().toLocaleDateString('en-US', {
@@ -242,6 +303,22 @@ const EntryDetailScreen = ({ route, navigation }) => {
         imageUrl = setupImage;
       }
 
+      // Upload gallery images that are local files
+      setIsUploading(true);
+      const uploadedGallery = [];
+      try {
+        for (const img of galleryImages) {
+          if (img && img.startsWith('file://')) {
+            const up = await imageAPI.uploadImage(img);
+            if (up.imageUrl) uploadedGallery.push(up.imageUrl);
+          } else if (img && img.startsWith('http')) {
+            uploadedGallery.push(img);
+          }
+        }
+      } catch (e) {
+        console.error('Gallery upload error:', e);
+      } finally { setIsUploading(false); }
+
       const response = await journalAPI.updateEntry(entry.id, {
         content: entry.mt5_ticket ? entry.content : generateJournalContent(),
         imageUrl, imageFilename,
@@ -249,6 +326,7 @@ const EntryDetailScreen = ({ route, navigation }) => {
         followingPlan: isFollowingPlan,
         emotionalState,
         notes,
+        galleryImages: uploadedGallery,
       });
 
       if (response.entry && response.message) {
@@ -687,6 +765,81 @@ const EntryDetailScreen = ({ route, navigation }) => {
               <Text style={styles.emotionalStateText}>
                 {entry.notes || 'No notes recorded'}
               </Text>
+            )}
+          </View>
+
+          {/* Gallery Images */}
+          <View style={styles.detailsCard}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <Text style={[styles.cardTitle, { marginBottom: 0 }]}>
+                <Ionicons name="images" size={20} color="#4A90E2" /> Gallery
+              </Text>
+              {isEditing && galleryImages.length < 5 && (
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#667eea', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }}
+                  onPress={showGalleryImagePicker}
+                >
+                  <Ionicons name="add" size={18} color="#fff" />
+                  <Text style={{ color: '#fff', fontWeight: '600', marginLeft: 4, fontSize: 13 }}>Add ({galleryImages.length}/5)</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {galleryImages.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4 }}>
+                {galleryImages.map((img, index) => (
+                  <View key={index} style={{ marginHorizontal: 4, position: 'relative' }}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (isEditing) {
+                          removeGalleryImage(index);
+                        } else {
+                          setSelectedImageUrl(img);
+                          setImageModalVisible(true);
+                        }
+                      }}
+                      activeOpacity={0.8}
+                      style={{ borderRadius: 12, overflow: 'hidden' }}
+                    >
+                      <Image source={{ uri: img }} style={{ width: 140, height: 140, borderRadius: 12 }} resizeMode="cover" />
+                      {isEditing && (
+                        <View style={{
+                          position: 'absolute', top: 6, right: 6,
+                          backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12,
+                          width: 24, height: 24, justifyContent: 'center', alignItems: 'center',
+                        }}>
+                          <Ionicons name="close" size={16} color="#fff" />
+                        </View>
+                      )}
+                      {!isEditing && (
+                        <View style={{
+                          position: 'absolute', bottom: 0, left: 0, right: 0,
+                          backgroundColor: 'rgba(0,0,0,0.4)', paddingVertical: 4,
+                          alignItems: 'center',
+                        }}>
+                          <Text style={{ color: '#fff', fontSize: 11, fontWeight: '600' }}>{index + 1} / {galleryImages.length}</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              isEditing ? (
+                <TouchableOpacity
+                  style={{
+                    borderWidth: 2, borderColor: '#e9ecef', borderStyle: 'dashed', borderRadius: 12,
+                    padding: 30, alignItems: 'center', backgroundColor: '#f8f9fa',
+                  }}
+                  onPress={showGalleryImagePicker}
+                >
+                  <Ionicons name="images-outline" size={36} color="#4A90E2" />
+                  <Text style={{ fontSize: 15, fontWeight: '600', color: '#333', marginTop: 10 }}>Add Gallery Images</Text>
+                  <Text style={{ fontSize: 13, color: '#777', marginTop: 4 }}>Up to 5 images per trade</Text>
+                </TouchableOpacity>
+              ) : (
+                <Text style={[styles.emotionalStateText, { fontStyle: 'normal', color: '#999' }]}>No gallery images</Text>
+              )
             )}
           </View>
 

@@ -60,6 +60,7 @@ const createTables = async () => {
       following_plan BOOLEAN DEFAULT false,
       emotional_state TEXT,
       notes TEXT,
+      gallery_images JSONB DEFAULT '[]'::jsonb,
 
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -130,6 +131,8 @@ const runLiveMigrations = async () => {
   const migrations = [
     // Add asset_type column (forex, index, commodity, crypto, stock, other)
     `ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS asset_type TEXT DEFAULT 'forex'`,
+    // Add gallery_images column for up to 5 user-uploaded images
+    `ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS gallery_images JSONB DEFAULT '[]'::jsonb`,
   ];
 
   for (const migration of migrations) {
@@ -151,11 +154,11 @@ const initializeDatabase = async () => {
     console.log('Creating database tables...');
     await createTables();
 
+    // Run live migrations BEFORE indexes (indexes may depend on new columns)
+    await runLiveMigrations();
+
     console.log('Creating database indexes...');
     await createIndexes();
-
-    // Run live migrations for new columns
-    await runLiveMigrations();
 
     // Skip data migration for now as we are starting fresh on Cloud
     // await runMigration();

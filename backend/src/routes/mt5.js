@@ -276,8 +276,8 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                     title, content, tags, is_private, account_id,
                     mt5_ticket, mt5_position_id, symbol, direction, volume, 
                     entry_price, stop_loss, take_profit, before_image_url,
-                    asset_type, created_at, updated_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())
+                    asset_type, following_plan, created_at, updated_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())
                 RETURNING id
             `, [
                 title,
@@ -294,7 +294,8 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                 sl || null,
                 tp || null,
                 imageUrl,
-                assetType
+                assetType,
+                null
             ]);
 
             res.status(201).json({ success: true, message: 'Trade entry recorded', entryId: result.rows[0].id });
@@ -324,8 +325,8 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                             title, content, tags, is_private, account_id,
                             mt5_ticket, mt5_position_id, symbol, direction, after_image_url, 
                             exit_price, pnl, commission, swap, balance,
-                            asset_type, created_at, updated_at
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())
+                            asset_type, following_plan, created_at, updated_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), NOW())
                         RETURNING id
                     `, [
                         `MT5 Exit: ${type} ${symbol}`,
@@ -343,7 +344,8 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                         commission || 0,
                         swap || 0,
                         balance || 0,
-                        assetType
+                        assetType,
+                        null
                     ]);
                     return res.status(200).json({ success: true, message: 'Orphaned exit recorded', entryId: result.rows[0].id });
                 }
