@@ -3,37 +3,43 @@ const { runQuery, getRow, getAllRows } = require('../database/connection');
 
 const router = express.Router();
 
-// Get all journal entries
+// Get all journal entries (user-scoped via accounts)
 router.get('/', async (req, res) => {
   try {
+    const authId = req.user.id; // Supabase Auth UUID
     const { page = 1, limit = 10, search = '', accountId, assetType } = req.query;
     const offset = (page - 1) * limit;
 
     let query = `
-      SELECT id, title, content, mood_rating, tags, is_private, image_url, image_filename, account_id, reason_mindset, created_at, updated_at,
-             mt5_ticket, before_image_url, after_image_url, pnl, commission, swap, entry_price, exit_price, balance, stop_loss, take_profit,
-             is_plan_compliant, plan_notes, symbol, direction, volume, following_plan, emotional_state, notes, asset_type
-      FROM journal_entries 
+      SELECT je.id, je.title, je.content, je.mood_rating, je.tags, je.is_private, je.image_url, je.image_filename, je.account_id, je.reason_mindset, je.created_at, je.updated_at,
+             je.mt5_ticket, je.before_image_url, je.after_image_url, je.pnl, je.commission, je.swap, je.entry_price, je.exit_price, je.balance, je.stop_loss, je.take_profit,
+             je.is_plan_compliant, je.plan_notes, je.symbol, je.direction, je.volume, je.following_plan, je.emotional_state, je.notes, je.asset_type
+      FROM journal_entries je
+      JOIN accounts a ON je.account_id = a.id
     `;
     let params = [];
     let whereConditions = [];
     let paramCount = 1;
 
+    // Always scope to authenticated user's accounts
+    whereConditions.push(`a.auth_id = $${paramCount++}`);
+    params.push(authId);
+
     // Filter by account if specified
     if (accountId) {
-      whereConditions.push(`account_id = $${paramCount++}`);
+      whereConditions.push(`je.account_id = $${paramCount++}`);
       params.push(parseInt(accountId));
     }
 
     // Filter by asset type if specified
     if (assetType) {
-      whereConditions.push(`asset_type = $${paramCount++}`);
+      whereConditions.push(`je.asset_type = $${paramCount++}`);
       params.push(assetType);
     }
 
     // Add search filter
     if (search) {
-      whereConditions.push(`(title ILIKE $${paramCount} OR content ILIKE $${paramCount})`);
+      whereConditions.push(`(je.title ILIKE $${paramCount} OR je.content ILIKE $${paramCount})`);
       params.push(`%${search}%`);
       paramCount++;
     }
@@ -43,34 +49,35 @@ router.get('/', async (req, res) => {
       query += ` WHERE ${whereConditions.join(' AND ')}`;
     }
 
-    query += ` ORDER BY created_at DESC LIMIT $${paramCount++} OFFSET $${paramCount++}`;
+    query += ` ORDER BY je.created_at DESC LIMIT $${paramCount++} OFFSET $${paramCount++}`;
     params.push(parseInt(limit), parseInt(offset));
 
     const entries = await getAllRows(query, params);
 
-    // Get total count for pagination
-    let countQuery = 'SELECT COUNT(*) as total FROM journal_entries';
+    // Get total count for pagination (user-scoped)
+    let countQuery = 'SELECT COUNT(*) as total FROM journal_entries je JOIN accounts a ON je.account_id = a.id';
     let countParams = [];
     let countParamIdx = 1;
 
-    if (whereConditions.length > 0) {
-      // Re-build conditions with fresh indexes strictly for count query to avoid index mismatch
-      let countConditions = [];
-      if (accountId) {
-        countConditions.push(`account_id = $${countParamIdx++}`);
-        countParams.push(parseInt(accountId));
-      }
-      if (assetType) {
-        countConditions.push(`asset_type = $${countParamIdx++}`);
-        countParams.push(assetType);
-      }
-      if (search) {
-        countConditions.push(`(title ILIKE $${countParamIdx} OR content ILIKE $${countParamIdx})`);
-        countParams.push(`%${search}%`);
-        countParamIdx++;
-      }
-      countQuery += ` WHERE ${countConditions.join(' AND ')}`;
+    // Always scope to authenticated user's accounts
+    let countConditions = [];
+    countConditions.push(`a.auth_id = $${countParamIdx++}`);
+    countParams.push(authId);
+
+    if (accountId) {
+      countConditions.push(`je.account_id = $${countParamIdx++}`);
+      countParams.push(parseInt(accountId));
     }
+    if (assetType) {
+      countConditions.push(`je.asset_type = $${countParamIdx++}`);
+      countParams.push(assetType);
+    }
+    if (search) {
+      countConditions.push(`(je.title ILIKE $${countParamIdx} OR je.content ILIKE $${countParamIdx})`);
+      countParams.push(`%${search}%`);
+      countParamIdx++;
+    }
+    countQuery += ` WHERE ${countConditions.join(' AND ')}`;
 
     const countResult = await getRow(countQuery, countParams);
     const totalEntries = parseInt(countResult?.total || 0);
@@ -98,14 +105,17 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get single journal entry
+// Get single journal entry (user-scoped)
 router.get('/:id', async (req, res) => {
   try {
+    const authId = req.user.id;
     const { id } = req.params;
 
     const entry = await getRow(
-      `SELECT * FROM journal_entries WHERE id = $1`,
-      [id]
+      `SELECT je.* FROM journal_entries je
+       JOIN accounts a ON je.account_id = a.id
+       WHERE je.id = $1 AND a.auth_id = $2`,
+      [id, authId]
     );
 
     if (!entry) {
@@ -130,12 +140,13 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Create new journal entry
+// Create new journal entry (user-scoped)
 router.post('/', async (req, res) => {
   try {
+    const authId = req.user.id;
     const {
       title, content, moodRating, tags = [], isPrivate = true,
-      imageUrl, imageFilename, accountId = 1, reasonMindset,
+      imageUrl, imageFilename, accountId, reasonMindset,
       createdAt, isPlanCompliant, planNotes,
       followingPlan, emotionalState, notes
     } = req.body;
@@ -145,6 +156,15 @@ router.post('/', async (req, res) => {
         error: 'Missing required fields',
         message: 'Title and content are required'
       });
+    }
+
+    // Verify the account belongs to this user
+    const resolvedAccountId = accountId || null;
+    if (resolvedAccountId) {
+      const ownerCheck = await getRow('SELECT id FROM accounts WHERE id = $1 AND auth_id = $2', [resolvedAccountId, authId]);
+      if (!ownerCheck) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Account does not belong to you' });
+      }
     }
 
     // Timestamp logic (Postgres handles timezone, but we can store explicit UTC if provided)
@@ -168,7 +188,7 @@ router.post('/', async (req, res) => {
         isPrivate,
         imageUrl || null,
         imageFilename || null,
-        accountId,
+        resolvedAccountId,
         reasonMindset || null,
         isPlanCompliant || false,
         planNotes || null,
@@ -199,9 +219,10 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update journal entry
+// Update journal entry (user-scoped)
 router.put('/:id', async (req, res) => {
   try {
+    const authId = req.user.id;
     const { id } = req.params;
     const {
       title, content, moodRating, tags, isPrivate,
@@ -209,7 +230,13 @@ router.put('/:id', async (req, res) => {
       isPlanCompliant, planNotes, followingPlan, emotionalState, notes
     } = req.body;
 
-    const existingEntry = await getRow('SELECT id FROM journal_entries WHERE id = $1', [id]);
+    // Verify entry belongs to this user's accounts
+    const existingEntry = await getRow(
+      `SELECT je.id FROM journal_entries je
+       JOIN accounts a ON je.account_id = a.id
+       WHERE je.id = $1 AND a.auth_id = $2`,
+      [id, authId]
+    );
 
     if (!existingEntry) {
       return res.status(404).json({ error: 'Entry not found' });
@@ -270,10 +297,24 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Delete journal entry
+// Delete journal entry (user-scoped)
 router.delete('/:id', async (req, res) => {
   try {
+    const authId = req.user.id;
     const { id } = req.params;
+
+    // Verify entry belongs to this user's accounts before deleting
+    const ownerCheck = await getRow(
+      `SELECT je.id FROM journal_entries je
+       JOIN accounts a ON je.account_id = a.id
+       WHERE je.id = $1 AND a.auth_id = $2`,
+      [id, authId]
+    );
+
+    if (!ownerCheck) {
+      return res.status(404).json({ error: 'Entry not found' });
+    }
+
     const result = await runQuery('DELETE FROM journal_entries WHERE id = $1', [id]);
 
     if (result.rowCount === 0) {

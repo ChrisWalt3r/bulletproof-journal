@@ -3,14 +3,32 @@ const { runQuery, getRow, getAllRows } = require('../database/connection');
 
 const router = express.Router();
 
-// GET /api/accounts - Get all accounts
+// GET /api/accounts - Get all accounts for the authenticated user
 router.get('/', async (req, res) => {
   try {
+    const authId = req.user.id; // Supabase Auth UUID
+
+    // One-time migration: claim orphaned accounts (auth_id IS NULL) for the first user who logs in.
+    // This handles the upgrade from single-user to multi-user without manual DB changes.
+    const orphanedAccounts = await getAllRows(
+      `SELECT id FROM accounts WHERE auth_id IS NULL`
+    );
+    if (orphanedAccounts.length > 0) {
+      // Check if ANY user has already claimed accounts
+      const claimedCheck = await getRow(`SELECT COUNT(*) as count FROM accounts WHERE auth_id IS NOT NULL`);
+      if (parseInt(claimedCheck?.count || 0) === 0) {
+        // No one has claimed yet — assign all orphaned accounts to this (first) user
+        await runQuery(`UPDATE accounts SET auth_id = $1 WHERE auth_id IS NULL`, [authId]);
+        console.log(`Migrated ${orphanedAccounts.length} orphaned account(s) to user ${authId}`);
+      }
+    }
+
     const accounts = await getAllRows(
       `SELECT id, name, description, color, starting_balance, is_active, created_at, updated_at 
          FROM accounts 
-         WHERE is_active = true 
-         ORDER BY created_at ASC`
+         WHERE is_active = true AND auth_id = $1
+         ORDER BY created_at ASC`,
+      [authId]
     );
 
     // Add entry count for each account
@@ -38,9 +56,10 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/accounts - Create new account
+// POST /api/accounts - Create new account for the authenticated user
 router.post('/', async (req, res) => {
   try {
+    const authId = req.user.id; // Supabase Auth UUID
     const { name, description, color, starting_balance } = req.body;
 
     if (!name) {
@@ -48,10 +67,10 @@ router.post('/', async (req, res) => {
     }
 
     const result = await runQuery(
-      `INSERT INTO accounts (name, description, color, starting_balance) 
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO accounts (auth_id, name, description, color, starting_balance) 
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [name, description || '', color || '#4A90E2', parseFloat(starting_balance) || 0]
+      [authId, name, description || '', color || '#4A90E2', parseFloat(starting_balance) || 0]
     );
 
     res.status(201).json({
@@ -68,13 +87,14 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/accounts/:id - Update account
+// PUT /api/accounts/:id - Update account (user-scoped)
 router.put('/:id', async (req, res) => {
   try {
+    const authId = req.user.id;
     const { id } = req.params;
     const { name, description, color, is_active, starting_balance } = req.body;
 
-    const existingAccount = await getRow('SELECT id FROM accounts WHERE id = $1', [id]);
+    const existingAccount = await getRow('SELECT id FROM accounts WHERE id = $1 AND auth_id = $2', [id, authId]);
     if (!existingAccount) {
       return res.status(404).json({ success: false, error: 'Account not found' });
     }
@@ -87,7 +107,7 @@ router.put('/:id', async (req, res) => {
            is_active = COALESCE($4, is_active), 
            starting_balance = COALESCE($5, starting_balance),
            updated_at = NOW()
-       WHERE id = $6
+       WHERE id = $6 AND auth_id = $7
        RETURNING *`,
       [
         name,
@@ -95,7 +115,8 @@ router.put('/:id', async (req, res) => {
         color,
         is_active,
         starting_balance != null ? parseFloat(starting_balance) : null,
-        id
+        id,
+        authId
       ]
     );
 
@@ -112,29 +133,26 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/accounts/:id - Delete account and all related data
+// DELETE /api/accounts/:id - Delete account and all related data (user-scoped)
 router.delete('/:id', async (req, res) => {
   try {
+    const authId = req.user.id;
     const { id } = req.params;
 
-    const existingAccount = await getRow('SELECT id FROM accounts WHERE id = $1', [id]);
+    const existingAccount = await getRow('SELECT id FROM accounts WHERE id = $1 AND auth_id = $2', [id, authId]);
     if (!existingAccount) {
       return res.status(404).json({ success: false, error: 'Account not found' });
     }
 
-    // Postgres CASCADE should handle this if defined in schema, but explicit delete is safer if not
-    // Schema says: account_id INTEGER REFERENCES accounts(id) -- NO CASCADE DEFINED in my init.js for journal_entries!
-    // I should manually delete journal entries first.
-
-    // Get count
+    // Get count of entries to delete
     const countRow = await getRow('SELECT COUNT(*) as count FROM journal_entries WHERE account_id = $1', [id]);
     const entryCount = parseInt(countRow?.count || 0);
 
-    // Delete entries
+    // Delete entries first (no CASCADE in schema)
     await runQuery('DELETE FROM journal_entries WHERE account_id = $1', [id]);
 
     // Delete account
-    await runQuery('DELETE FROM accounts WHERE id = $1', [id]);
+    await runQuery('DELETE FROM accounts WHERE id = $1 AND auth_id = $2', [id, authId]);
 
     res.json({
       success: true,
@@ -147,12 +165,13 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// GET /api/accounts/:id/stats - Get account statistics
+// GET /api/accounts/:id/stats - Get account statistics (user-scoped)
 router.get('/:id/stats', async (req, res) => {
   try {
+    const authId = req.user.id;
     const { id } = req.params;
 
-    const account = await getRow('SELECT * FROM accounts WHERE id = $1', [id]);
+    const account = await getRow('SELECT * FROM accounts WHERE id = $1 AND auth_id = $2', [id, authId]);
     if (!account) {
       return res.status(404).json({ success: false, error: 'Account not found' });
     }

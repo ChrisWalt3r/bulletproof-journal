@@ -5,10 +5,11 @@
 //+------------------------------------------------------------------+
 #property copyright "Bulletproof Journal"
 #property link      "https://yourjournalapp.com"
-#property version   "3.01"
+#property version   "3.10"
 #property description "Universal Auto-Journaler: captures ALL trades across all"
 #property description "symbols (forex, indices, commodities, etc.) from a single"
 #property description "chart. Attach to any ONE chart — it monitors the entire account."
+#property description "v3.10: Auto-syncs missed trades when MT5 desktop starts."
 #property strict
 
 // --- INPUTS ---
@@ -17,6 +18,7 @@ input string   InpApiSecret   = "BulletproofTrades2026!";                 // Web
 input int      InpAccountId   = 1;                                // Journal Account ID
 input int      InpWidth       = 1366;                             // Screenshot Width
 input int      InpHeight      = 768;                              // Screenshot Height
+input int      InpSyncDays    = 7;                                // Sync lookback (days)
 
 // --- GLOBALS ---
 const string msg_base64_table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -27,13 +29,23 @@ const string msg_base64_table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstu
 int OnInit()
 {
    Print("============================================");
-   Print("  AutoJournaler v3.01 (Universal) Started");
+   Print("  AutoJournaler v3.10 (Universal) Started");
    Print("  Webhook: ", InpApiUrl);
    Print("  Account ID: ", InpAccountId);
+   Print("  Sync Lookback: ", InpSyncDays, " days");
    Print("  Monitoring: ALL symbols on this account");
    Print("  Attach to ONE chart only — it captures");
    Print("  forex, indices, commodities, crypto, etc.");
    Print("============================================");
+   
+   // Catch-up sync: send any deals that were missed while MT5 desktop was off
+   if(InpSyncDays > 0)
+   {
+      // Delay slightly to let MT5 finish initializing
+      Sleep(3000);
+      SyncMissedDeals();
+   }
+   
    return(INIT_SUCCEEDED);
 }
 
@@ -112,6 +124,282 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
          Print("Deal type is not BUY/SELL: type=", type,
                " (BUY=", DEAL_TYPE_BUY, " SELL=", DEAL_TYPE_SELL, ")");
       }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Sync missed deals — runs once when EA starts                     |
+//| Scans last N days of trade history, asks the backend which       |
+//| tickets are missing, and sends only those.                       |
+//+------------------------------------------------------------------+
+void SyncMissedDeals()
+{
+   Print("--- Sync: Checking for missed deals (last ", InpSyncDays, " days) ---");
+   
+   datetime from = TimeCurrent() - InpSyncDays * 86400; // N days ago
+   datetime to = TimeCurrent();
+   
+   if(!HistorySelect(from, to))
+   {
+      Print("Sync: HistorySelect failed. Error: ", GetLastError());
+      return;
+   }
+   
+   int totalDeals = HistoryDealsTotal();
+   Print("Sync: Found ", totalDeals, " deals in history");
+   
+   if(totalDeals == 0) return;
+   
+   // Collect all BUY/SELL deal tickets (both ENTRY and EXIT)
+   ulong dealTickets[];
+   string dealActions[];
+   ArrayResize(dealTickets, 0);
+   ArrayResize(dealActions, 0);
+   
+   for(int i = 0; i < totalDeals; i++)
+   {
+      ulong ticket = HistoryDealGetTicket(i);
+      if(ticket == 0) continue;
+      
+      long type = HistoryDealGetInteger(ticket, DEAL_TYPE);
+      long entry = HistoryDealGetInteger(ticket, DEAL_ENTRY);
+      
+      // Only process BUY/SELL trades (skip balance, credit, etc.)
+      if(type != DEAL_TYPE_BUY && type != DEAL_TYPE_SELL) continue;
+      
+      string action = "";
+      if(entry == DEAL_ENTRY_IN) action = "ENTRY";
+      else if(entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_OUT_BY) action = "EXIT";
+      else continue; // Unknown entry type, skip
+      
+      int newSize = ArraySize(dealTickets) + 1;
+      ArrayResize(dealTickets, newSize);
+      ArrayResize(dealActions, newSize);
+      dealTickets[newSize - 1] = ticket;
+      dealActions[newSize - 1] = action;
+   }
+   
+   int numDeals = ArraySize(dealTickets);
+   Print("Sync: ", numDeals, " BUY/SELL deals to check");
+   
+   if(numDeals == 0) return;
+   
+   // Build check-tickets JSON: {"tickets":["123","456",...], "accountId":"1"}
+   string checkUrl = InpApiUrl;
+   // Replace /webhook with /check-tickets
+   StringReplace(checkUrl, "/webhook", "/check-tickets");
+   
+   string ticketsJson = "[";
+   for(int i = 0; i < numDeals; i++)
+   {
+      if(i > 0) ticketsJson += ",";
+      ticketsJson += "\"" + IntegerToString(dealTickets[i]) + "\"";
+   }
+   ticketsJson += "]";
+   
+   string json = "{\"tickets\":" + ticketsJson + ",\"accountId\":\"" + IntegerToString(InpAccountId) + "\"}";
+   
+   // Send check request
+   string headers = "Content-Type: application/json\r\n";
+   if(InpApiSecret != "")
+      headers += "x-api-secret: " + InpApiSecret + "\r\n";
+   
+   uchar body[];
+   StringToCharArray(json, body, 0, WHOLE_ARRAY);
+   int bodySize = ArraySize(body);
+   if(bodySize > 0 && body[bodySize - 1] == 0)
+      ArrayResize(body, bodySize - 1);
+   
+   char resultData[];
+   string resultHeaders;
+   
+   Print("Sync: Asking backend which of ", numDeals, " deals are missing...");
+   int res = WebRequest("POST", checkUrl, headers, 15000, body, resultData, resultHeaders);
+   
+   if(res != 200)
+   {
+      Print("Sync: check-tickets request failed. HTTP ", res);
+      if(res == -1) Print("Sync: Check WebRequest URL whitelist");
+      string errStr = CharArrayToString(resultData);
+      Print("Sync: Response: ", errStr);
+      return;
+   }
+   
+   // Parse response to find missing tickets
+   // Response format: {"success":true,"total":N,"existing":M,"missing":["123","789"]}
+   string response = CharArrayToString(resultData);
+   Print("Sync: Server response: ", response);
+   
+   // Extract missing tickets from JSON response
+   // Simple parser: find "missing":[ and extract ticket strings
+   int missingStart = StringFind(response, "\"missing\":[");
+   if(missingStart < 0)
+   {
+      Print("Sync: Could not parse missing tickets from response");
+      return;
+   }
+   
+   int arrayStart = StringFind(response, "[", missingStart);
+   int arrayEnd = StringFind(response, "]", arrayStart);
+   if(arrayStart < 0 || arrayEnd < 0)
+   {
+      Print("Sync: Malformed missing array");
+      return;
+   }
+   
+   string missingStr = StringSubstr(response, arrayStart + 1, arrayEnd - arrayStart - 1);
+   
+   // Check if empty
+   if(StringLen(missingStr) == 0 || missingStr == "")
+   {
+      Print("Sync: All deals are already recorded. Nothing to sync.");
+      return;
+   }
+   
+   // Parse individual ticket strings — format: "123","456","789"
+   // Collect missing ticket numbers
+   ulong missingTickets[];
+   ArrayResize(missingTickets, 0);
+   
+   int pos = 0;
+   while(pos < StringLen(missingStr))
+   {
+      int quoteStart = StringFind(missingStr, "\"", pos);
+      if(quoteStart < 0) break;
+      int quoteEnd = StringFind(missingStr, "\"", quoteStart + 1);
+      if(quoteEnd < 0) break;
+      
+      string ticketStr = StringSubstr(missingStr, quoteStart + 1, quoteEnd - quoteStart - 1);
+      ulong ticketNum = (ulong)StringToInteger(ticketStr);
+      if(ticketNum > 0)
+      {
+         int n = ArraySize(missingTickets) + 1;
+         ArrayResize(missingTickets, n);
+         missingTickets[n - 1] = ticketNum;
+      }
+      pos = quoteEnd + 1;
+   }
+   
+   int numMissing = ArraySize(missingTickets);
+   Print("Sync: ", numMissing, " missed deal(s) to send");
+   
+   if(numMissing == 0) return;
+   
+   // Send each missed deal (without screenshot since charts may not reflect the past)
+   int synced = 0;
+   for(int i = 0; i < numMissing; i++)
+   {
+      ulong ticket = missingTickets[i];
+      
+      // Find the action for this ticket
+      string action = "";
+      for(int j = 0; j < numDeals; j++)
+      {
+         if(dealTickets[j] == ticket)
+         {
+            action = dealActions[j];
+            break;
+         }
+      }
+      
+      if(action == "")
+      {
+         Print("Sync: Could not find action for ticket ", ticket, " — skipping");
+         continue;
+      }
+      
+      // Ensure deal is in history cache
+      if(!HistoryDealSelect(ticket))
+      {
+         HistorySelect(from, to);
+         if(!HistoryDealSelect(ticket))
+         {
+            Print("Sync: Cannot select deal ", ticket, " — skipping");
+            continue;
+         }
+      }
+      
+      Print("Sync: Sending missed ", action, " deal ticket ", ticket);
+      SendSyncDeal(ticket, action);
+      synced++;
+      
+      // Small delay between requests to not overwhelm the server
+      Sleep(1000);
+   }
+   
+   Print("--- Sync Complete: Sent ", synced, " missed deal(s) ---");
+}
+
+//+------------------------------------------------------------------+
+//| Send a single missed deal to the API (no screenshot)             |
+//| Used during catch-up sync for trades placed while PC was off     |
+//+------------------------------------------------------------------+
+void SendSyncDeal(ulong deal_ticket, string action)
+{
+   string symbol = HistoryDealGetString(deal_ticket, DEAL_SYMBOL);
+   long typeLong = HistoryDealGetInteger(deal_ticket, DEAL_TYPE);
+   string type = (typeLong == DEAL_TYPE_BUY) ? "BUY" : "SELL";
+   double volume = HistoryDealGetDouble(deal_ticket, DEAL_VOLUME);
+   double price = HistoryDealGetDouble(deal_ticket, DEAL_PRICE);
+   double profit = HistoryDealGetDouble(deal_ticket, DEAL_PROFIT);
+   double commission = HistoryDealGetDouble(deal_ticket, DEAL_COMMISSION);
+   double swap = HistoryDealGetDouble(deal_ticket, DEAL_SWAP);
+   string comment = HistoryDealGetString(deal_ticket, DEAL_COMMENT);
+   long positionId = HistoryDealGetInteger(deal_ticket, DEAL_POSITION_ID);
+
+   // SL/TP may not be available for closed positions — try anyway
+   double sl = 0, tp = 0;
+   if(PositionSelectByTicket(positionId)) {
+      sl = PositionGetDouble(POSITION_SL);
+      tp = PositionGetDouble(POSITION_TP);
+   }
+
+   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   if(digits <= 0) digits = 5;
+
+   // Build JSON (no screenshot for synced deals)
+   string json = "{";
+   json += "\"action\":\"" + action + "\",";
+   json += "\"ticket\":\"" + IntegerToString(deal_ticket) + "\",";
+   json += "\"positionId\":\"" + IntegerToString(positionId) + "\",";
+   json += "\"symbol\":\"" + symbol + "\",";
+   json += "\"type\":\"" + type + "\",";
+   json += "\"volume\":\"" + DoubleToString(volume, 2) + "\",";
+   json += "\"price\":\"" + DoubleToString(price, digits) + "\",";
+   json += "\"accountId\":\"" + IntegerToString(InpAccountId) + "\",";
+   json += "\"profit\":\"" + DoubleToString(profit, 2) + "\",";
+   json += "\"commission\":\"" + DoubleToString(commission, 2) + "\",";
+   json += "\"swap\":\"" + DoubleToString(swap, 2) + "\",";
+   json += "\"balance\":\"" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2) + "\",";
+   json += "\"sl\":\"" + DoubleToString(sl, digits) + "\",";
+   json += "\"tp\":\"" + DoubleToString(tp, digits) + "\",";
+   json += "\"comment\":\"" + EscapeJsonString(comment) + "\"";
+   json += "}";
+
+   string headers = "Content-Type: application/json\r\n";
+   if(InpApiSecret != "")
+      headers += "x-api-secret: " + InpApiSecret + "\r\n";
+   
+   uchar body[];
+   StringToCharArray(json, body, 0, WHOLE_ARRAY);
+   int bodySize = ArraySize(body);
+   if(bodySize > 0 && body[bodySize - 1] == 0)
+      ArrayResize(body, bodySize - 1);
+   
+   char resultData[];
+   string resultHeaders;
+   
+   int res = WebRequest("POST", InpApiUrl, headers, 10000, body, resultData, resultHeaders);
+   
+   if(res == 200 || res == 201)
+   {
+      Print("Sync: Sent ", action, " for ", symbol, " ticket ", deal_ticket, " OK");
+   }
+   else
+   {
+      Print("Sync: Failed to send ticket ", deal_ticket, " HTTP ", res);
+      string errStr = CharArrayToString(resultData);
+      Print("Sync: Response: ", errStr);
    }
 }
 

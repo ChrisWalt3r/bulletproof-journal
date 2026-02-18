@@ -1,6 +1,6 @@
 const express = require('express');
 const multer = require('multer');
-const { runQuery, getRow } = require('../database/connection');
+const { runQuery, getRow, getAllRows } = require('../database/connection');
 const { verifyWebhookSecret } = require('../middleware/auth');
 const storageService = require('../services/storage');
 
@@ -91,6 +91,51 @@ const upload = multer({
 });
 
 /**
+ * POST /api/mt5/check-tickets
+ * Accepts an array of deal tickets and returns which ones already exist.
+ * Used by EA's catch-up sync to avoid re-sending known trades.
+ * Secured by verifyWebhookSecret (same as webhook).
+ */
+router.post('/check-tickets', verifyWebhookSecret, async (req, res) => {
+    try {
+        const { tickets, accountId } = req.body;
+
+        if (!tickets || !Array.isArray(tickets) || tickets.length === 0) {
+            return res.status(400).json({ error: 'tickets array is required' });
+        }
+
+        // Query which of these tickets already exist (by mt5_ticket OR mt5_position_id)
+        const placeholders = tickets.map((_, i) => `$${i + 1}`).join(',');
+        const existingRows = await getAllRows(
+            `SELECT mt5_ticket, mt5_position_id FROM journal_entries 
+             WHERE mt5_ticket::text IN (${placeholders}) 
+                OR mt5_position_id IN (${placeholders})`,
+            [...tickets.map(String), ...tickets.map(String)]
+        );
+
+        const existingTickets = new Set();
+        existingRows.forEach(row => {
+            if (row.mt5_ticket) existingTickets.add(String(row.mt5_ticket));
+            if (row.mt5_position_id) existingTickets.add(String(row.mt5_position_id));
+        });
+
+        // Return which tickets are missing (need to be synced)
+        const missingTickets = tickets.filter(t => !existingTickets.has(String(t)));
+
+        res.json({
+            success: true,
+            total: tickets.length,
+            existing: tickets.length - missingTickets.length,
+            missing: missingTickets
+        });
+
+    } catch (error) {
+        console.error('Check tickets error:', error);
+        res.status(500).json({ error: 'Failed to check tickets' });
+    }
+});
+
+/**
  * POST /api/mt5/webhook
  * Handles incoming trade data from MT5 EA.
  * Secured by verifyWebhookSecret (checks x-api-secret header)
@@ -113,7 +158,8 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
             sl,
             tp,
             image_base64,
-            image_filename
+            image_filename,
+            accountId: rawAccountId // Sent by EA as "Journal Account ID"
         } = req.body;
 
         const imageFile = req.file;
@@ -122,9 +168,14 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
             return res.status(400).json({ error: 'Missing required fields: ticket or action' });
         }
 
-        // Hardcode account_id to 1 for now, or look up based on some logic if multi-user
-        // In the future, we could map MT5 Account Number to App Account ID via `accounts` table
-        const accountId = 1;
+        // Use the account ID sent by the EA (user configures this in EA inputs)
+        const accountId = parseInt(rawAccountId) || 1;
+
+        // Verify the account exists in our database
+        const accountCheck = await getRow('SELECT id FROM accounts WHERE id = $1', [accountId]);
+        if (!accountCheck) {
+            return res.status(404).json({ error: `Account ID ${accountId} not found. Create it in the app first.` });
+        }
 
         // Handle Image
         let imageUrl = null;
