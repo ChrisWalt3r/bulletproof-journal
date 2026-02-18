@@ -360,6 +360,7 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                       swap = $5,
                       balance = $6,
                       mt5_position_id = COALESCE($7, mt5_position_id),
+                      following_plan = NULL,
                       updated_at = NOW()
                     WHERE id = $8
                 `, [
@@ -385,6 +386,7 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                   commission = $4,
                   swap = $5,
                   balance = $6,
+                  following_plan = NULL,
                   updated_at = NOW()
                 WHERE id = $7
             `, [
