@@ -142,7 +142,9 @@ const runLiveMigrations = async () => {
     `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS description TEXT`,
     `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS starting_balance DECIMAL DEFAULT 0`,
     `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`,
-    // Add unique constraint on (auth_id, name) if it doesn't exist
+    // Drop the bad single-column unique constraint on auth_id (only allows 1 account per user)
+    `DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'accounts_auth_id_key') THEN ALTER TABLE accounts DROP CONSTRAINT accounts_auth_id_key; END IF; END $$`,
+    // Add correct composite unique constraint on (auth_id, name) — allows multiple accounts per user
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'accounts_auth_id_name_key') THEN ALTER TABLE accounts ADD CONSTRAINT accounts_auth_id_name_key UNIQUE (auth_id, name); END IF; END $$`,
   ];
 
