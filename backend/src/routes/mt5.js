@@ -172,15 +172,15 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
         let accountId = parseInt(rawAccountId) || 1;
 
         // Verify the account exists in our database
-        let accountCheck = await getRow('SELECT id FROM accounts WHERE id = $1', [accountId]);
+        let accountCheck = await getRow('SELECT id FROM accounts WHERE id = $1 AND is_active = true', [accountId]);
         if (!accountCheck) {
-            // Fallback: use the most recently created active account
+            // Fallback: use the single active account
             // This handles the case where the account was deleted and recreated (new auto-incremented ID)
             const fallbackAccount = await getRow('SELECT id FROM accounts WHERE is_active = true ORDER BY created_at DESC LIMIT 1');
             if (!fallbackAccount) {
                 return res.status(404).json({ error: `Account ID ${accountId} not found. Create it in the app first.` });
             }
-            console.log(`Account ID ${accountId} not found, falling back to account ID ${fallbackAccount.id}`);
+            console.log(`Account ID ${accountId} not found, falling back to active account ID ${fallbackAccount.id}`);
             accountId = fallbackAccount.id;
         }
 

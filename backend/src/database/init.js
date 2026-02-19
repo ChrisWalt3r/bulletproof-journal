@@ -136,6 +136,14 @@ const runLiveMigrations = async () => {
     // Fix: reset all unreviewed MT5 entries to NULL (NEEDS REVIEW) instead of false (OFF PLAN)
     // Only affects MT5 entries that have never been explicitly reviewed
     `UPDATE journal_entries SET following_plan = NULL WHERE mt5_ticket IS NOT NULL AND following_plan = false AND emotional_state IS NULL`,
+    // Accounts table migrations — add columns that may be missing from older deployments
+    `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS auth_id UUID`,
+    `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS color TEXT DEFAULT '#4A90E2'`,
+    `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS description TEXT`,
+    `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS starting_balance DECIMAL DEFAULT 0`,
+    `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`,
+    // Add unique constraint on (auth_id, name) if it doesn't exist
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'accounts_auth_id_name_key') THEN ALTER TABLE accounts ADD CONSTRAINT accounts_auth_id_name_key UNIQUE (auth_id, name); END IF; END $$`,
   ];
 
   for (const migration of migrations) {
