@@ -110,7 +110,7 @@ router.post('/check-tickets', verifyWebhookSecret, async (req, res) => {
             `SELECT mt5_ticket, mt5_position_id FROM journal_entries 
              WHERE mt5_ticket::text IN (${placeholders}) 
                 OR mt5_position_id IN (${placeholders})`,
-            [...tickets.map(String), ...tickets.map(String)]
+            tickets.map(String)
         );
 
         const existingTickets = new Set();
