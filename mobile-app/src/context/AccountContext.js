@@ -64,19 +64,18 @@ export const AccountProvider = ({ children }) => {
 
       // Set current account
       const savedAccountId = await loadSavedAccountId();
+      let resolvedAccount = null;
       if (savedAccountId) {
-        const savedAccount = accountsList.find(acc => acc.id === savedAccountId);
-        if (savedAccount) {
-          setCurrentAccount(savedAccount);
-        } else if (accountsList.length > 0) {
-          setCurrentAccount(accountsList[0]);
-        } else {
-          setCurrentAccount(null);
-        }
+        resolvedAccount = accountsList.find(acc => acc.id === savedAccountId) || accountsList[0] || null;
       } else if (accountsList.length > 0) {
-        setCurrentAccount(accountsList[0]);
+        resolvedAccount = accountsList[0];
+      }
+      setCurrentAccount(resolvedAccount);
+      // Always persist the resolved account ID so stale IDs don't linger
+      if (resolvedAccount) {
+        await AsyncStorage.setItem('currentAccountId', resolvedAccount.id.toString());
       } else {
-        setCurrentAccount(null);
+        await AsyncStorage.removeItem('currentAccountId');
       }
     } catch (error) {
       console.error('Error fetching accounts:', error);
