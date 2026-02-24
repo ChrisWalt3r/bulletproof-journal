@@ -110,6 +110,10 @@ export const AccountProvider = ({ children }) => {
     try {
       const response = await accountsAPI.createAccount(accountData);
       await fetchAccounts();
+      // Explicitly switch to the newly created account so AsyncStorage is updated
+      if (response.data) {
+        await switchAccount(response.data);
+      }
       return { success: true, account: response.data };
     } catch (error) {
       console.error('Error creating account:', error);

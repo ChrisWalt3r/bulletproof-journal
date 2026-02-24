@@ -98,19 +98,28 @@ const upload = multer({
  */
 router.post('/check-tickets', verifyWebhookSecret, async (req, res) => {
     try {
-        const { tickets, accountId } = req.body;
+        const { tickets, accountId: rawAccountId } = req.body;
 
         if (!tickets || !Array.isArray(tickets) || tickets.length === 0) {
             return res.status(400).json({ error: 'tickets array is required' });
         }
 
-        // Query which of these tickets already exist (by mt5_ticket OR mt5_position_id)
+        // Resolve the real account ID (same fallback logic as webhook)
+        let resolvedAccountId = parseInt(rawAccountId) || 1;
+        const accountCheck = await getRow('SELECT id FROM accounts WHERE id = $1', [resolvedAccountId]);
+        if (!accountCheck) {
+            const fallback = await getRow('SELECT id FROM accounts ORDER BY created_at DESC LIMIT 1');
+            if (fallback) resolvedAccountId = fallback.id;
+        }
+
+        // Query which of these tickets already exist — scoped to this account only
         const placeholders = tickets.map((_, i) => `$${i + 1}`).join(',');
         const existingRows = await getAllRows(
             `SELECT mt5_ticket, mt5_position_id FROM journal_entries 
-             WHERE mt5_ticket::text IN (${placeholders}) 
-                OR mt5_position_id IN (${placeholders})`,
-            tickets.map(String)
+             WHERE account_id = $${tickets.length + 1}
+               AND (mt5_ticket::text IN (${placeholders}) 
+                OR mt5_position_id IN (${placeholders}))`,
+            [...tickets.map(String), resolvedAccountId]
         );
 
         const existingTickets = new Set();
@@ -172,15 +181,15 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
         let accountId = parseInt(rawAccountId) || 1;
 
         // Verify the account exists in our database
-        let accountCheck = await getRow('SELECT id FROM accounts WHERE id = $1 AND is_active = true', [accountId]);
+        let accountCheck = await getRow('SELECT id FROM accounts WHERE id = $1', [accountId]);
         if (!accountCheck) {
-            // Fallback: use the single active account
+            // Fallback: use the most recently created account regardless of is_active
             // This handles the case where the account was deleted and recreated (new auto-incremented ID)
-            const fallbackAccount = await getRow('SELECT id FROM accounts WHERE is_active = true ORDER BY created_at DESC LIMIT 1');
+            const fallbackAccount = await getRow('SELECT id FROM accounts ORDER BY created_at DESC LIMIT 1');
             if (!fallbackAccount) {
                 return res.status(404).json({ error: `Account ID ${accountId} not found. Create it in the app first.` });
             }
-            console.log(`Account ID ${accountId} not found, falling back to active account ID ${fallbackAccount.id}`);
+            console.log(`Account ID ${accountId} not found, falling back to account ID ${fallbackAccount.id}`);
             accountId = fallbackAccount.id;
         }
 
@@ -305,7 +314,7 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                 null
             ]);
 
-            res.status(201).json({ success: true, message: 'Trade entry recorded', entryId: result.rows[0].id });
+            res.status(201).json({ success: true, message: 'Trade entry recorded', entryId: result.rows[0].id, accountId });
 
         } else if (action === 'EXIT') {
             const totalPnL = parseFloat(profit || 0) + parseFloat(commission || 0) + parseFloat(swap || 0);
