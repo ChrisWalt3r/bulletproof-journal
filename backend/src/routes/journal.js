@@ -308,7 +308,8 @@ router.delete('/:id', async (req, res) => {
 
     // Verify entry belongs to this user's accounts before deleting
     const ownerCheck = await getRow(
-      `SELECT je.id FROM journal_entries je
+      `SELECT je.id, je.mt5_ticket, je.mt5_position_id, je.mt5_exit_ticket, je.account_id
+       FROM journal_entries je
        JOIN accounts a ON je.account_id = a.id
        WHERE je.id = $1 AND a.auth_id = $2`,
       [id, authId]
@@ -316,6 +317,20 @@ router.delete('/:id', async (req, res) => {
 
     if (!ownerCheck) {
       return res.status(404).json({ error: 'Entry not found' });
+    }
+
+    // If this is an MT5 entry, track the deletion so catch-up sync won't re-create it
+    if (ownerCheck.mt5_ticket || ownerCheck.mt5_position_id) {
+      await runQuery(
+        `INSERT INTO deleted_mt5_entries (mt5_ticket, mt5_position_id, mt5_exit_ticket, account_id)
+         VALUES ($1, $2, $3, $4)`,
+        [
+          ownerCheck.mt5_ticket || null,
+          ownerCheck.mt5_position_id || null,
+          ownerCheck.mt5_exit_ticket || null,
+          ownerCheck.account_id
+        ]
+      );
     }
 
     const result = await runQuery('DELETE FROM journal_entries WHERE id = $1', [id]);

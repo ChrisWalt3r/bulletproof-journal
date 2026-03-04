@@ -102,6 +102,16 @@ const createTables = async () => {
       notes TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(habit_id, log_date)
+    )`,
+
+    // Track deleted MT5 entries so catch-up sync doesn't re-create them
+    `CREATE TABLE IF NOT EXISTS deleted_mt5_entries (
+      id SERIAL PRIMARY KEY,
+      mt5_ticket BIGINT,
+      mt5_position_id TEXT,
+      mt5_exit_ticket BIGINT,
+      account_id INTEGER REFERENCES accounts(id),
+      deleted_at TIMESTAMPTZ DEFAULT NOW()
     )`
   ];
 
@@ -118,7 +128,12 @@ const createIndexes = async () => {
     'CREATE INDEX IF NOT EXISTS idx_journal_entries_auth ON journal_entries(account_id)',
     'CREATE INDEX IF NOT EXISTS idx_journal_entries_mt5 ON journal_entries(mt5_ticket)',
     'CREATE INDEX IF NOT EXISTS idx_journal_entries_asset_type ON journal_entries(asset_type)',
-    'CREATE INDEX IF NOT EXISTS idx_accounts_auth ON accounts(auth_id)'
+    'CREATE INDEX IF NOT EXISTS idx_accounts_auth ON accounts(auth_id)',
+    'CREATE INDEX IF NOT EXISTS idx_journal_entries_mt5_exit ON journal_entries(mt5_exit_ticket)',
+    'CREATE INDEX IF NOT EXISTS idx_journal_entries_mt5_position ON journal_entries(mt5_position_id)',
+    'CREATE INDEX IF NOT EXISTS idx_deleted_mt5_ticket ON deleted_mt5_entries(mt5_ticket)',
+    'CREATE INDEX IF NOT EXISTS idx_deleted_mt5_position ON deleted_mt5_entries(mt5_position_id)',
+    'CREATE INDEX IF NOT EXISTS idx_deleted_mt5_exit_ticket ON deleted_mt5_entries(mt5_exit_ticket)'
   ];
 
   for (const indexQuery of indexes) {
@@ -146,6 +161,8 @@ const runLiveMigrations = async () => {
     `DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'accounts_auth_id_key') THEN ALTER TABLE accounts DROP CONSTRAINT accounts_auth_id_key; END IF; END $$`,
     // Add correct composite unique constraint on (auth_id, name) — allows multiple accounts per user
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'accounts_auth_id_name_key') THEN ALTER TABLE accounts ADD CONSTRAINT accounts_auth_id_name_key UNIQUE (auth_id, name); END IF; END $$`,
+    // Add mt5_exit_ticket column to track EXIT deal tickets (prevents re-syncing exits)
+    `ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS mt5_exit_ticket BIGINT`,
   ];
 
   for (const migration of migrations) {

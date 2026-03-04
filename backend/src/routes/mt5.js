@@ -113,12 +113,14 @@ router.post('/check-tickets', verifyWebhookSecret, async (req, res) => {
         }
 
         // Query which of these tickets already exist — scoped to this account only
+        // Also check mt5_exit_ticket so EXIT deals aren't re-sent every sync
         const placeholders = tickets.map((_, i) => `$${i + 1}`).join(',');
         const existingRows = await getAllRows(
-            `SELECT mt5_ticket, mt5_position_id FROM journal_entries 
+            `SELECT mt5_ticket, mt5_position_id, mt5_exit_ticket FROM journal_entries 
              WHERE account_id = $${tickets.length + 1}
                AND (mt5_ticket::text IN (${placeholders}) 
-                OR mt5_position_id IN (${placeholders}))`,
+                OR mt5_position_id IN (${placeholders})
+                OR mt5_exit_ticket::text IN (${placeholders}))`,
             [...tickets.map(String), resolvedAccountId]
         );
 
@@ -126,6 +128,23 @@ router.post('/check-tickets', verifyWebhookSecret, async (req, res) => {
         existingRows.forEach(row => {
             if (row.mt5_ticket) existingTickets.add(String(row.mt5_ticket));
             if (row.mt5_position_id) existingTickets.add(String(row.mt5_position_id));
+            if (row.mt5_exit_ticket) existingTickets.add(String(row.mt5_exit_ticket));
+        });
+
+        // Also check deleted_mt5_entries table so deleted trades aren't re-synced
+        const deletedRows = await getAllRows(
+            `SELECT mt5_ticket, mt5_position_id, mt5_exit_ticket FROM deleted_mt5_entries
+             WHERE account_id = $${tickets.length + 1}
+               AND (mt5_ticket::text IN (${placeholders})
+                OR mt5_position_id IN (${placeholders})
+                OR mt5_exit_ticket::text IN (${placeholders}))`,
+            [...tickets.map(String), resolvedAccountId]
+        );
+
+        deletedRows.forEach(row => {
+            if (row.mt5_ticket) existingTickets.add(String(row.mt5_ticket));
+            if (row.mt5_position_id) existingTickets.add(String(row.mt5_position_id));
+            if (row.mt5_exit_ticket) existingTickets.add(String(row.mt5_exit_ticket));
         });
 
         // Return which tickets are missing (need to be synced)
@@ -341,8 +360,8 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                             title, content, tags, is_private, account_id,
                             mt5_ticket, mt5_position_id, symbol, direction, after_image_url, 
                             exit_price, pnl, commission, swap, balance,
-                            asset_type, following_plan, created_at, updated_at
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), NOW())
+                            asset_type, following_plan, mt5_exit_ticket, created_at, updated_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), NOW())
                         RETURNING id
                     `, [
                         `MT5 Exit: ${type} ${symbol}`,
@@ -361,12 +380,13 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                         swap || 0,
                         balance || 0,
                         assetType,
-                        null
+                        null,
+                        ticket
                     ]);
                     return res.status(200).json({ success: true, message: 'Orphaned exit recorded', entryId: result.rows[0].id });
                 }
 
-                // Found via ticket fallback — update it
+                // Found via ticket fallback — update it (preserve user review data)
                 await runQuery(`
                     UPDATE journal_entries SET 
                       after_image_url = COALESCE($1, after_image_url),
@@ -376,7 +396,7 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                       swap = $5,
                       balance = $6,
                       mt5_position_id = COALESCE($7, mt5_position_id),
-                      following_plan = NULL,
+                      mt5_exit_ticket = $9,
                       updated_at = NOW()
                     WHERE id = $8
                 `, [
@@ -387,13 +407,14 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                     swap || 0,
                     balance || 0,
                     positionId || null,
-                    fallback.id
+                    fallback.id,
+                    ticket
                 ]);
 
                 return res.status(200).json({ success: true, message: 'Trade exit recorded' });
             }
 
-            // Update existing entry matched by position ID
+            // Update existing entry matched by position ID (preserve user review data)
             await runQuery(`
                 UPDATE journal_entries SET 
                   after_image_url = COALESCE($1, after_image_url),
@@ -402,7 +423,7 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                   commission = $4,
                   swap = $5,
                   balance = $6,
-                  following_plan = NULL,
+                  mt5_exit_ticket = $8,
                   updated_at = NOW()
                 WHERE id = $7
             `, [
@@ -412,7 +433,8 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                 commission || 0,
                 swap || 0,
                 balance || 0,
-                existing.id
+                existing.id,
+                ticket
             ]);
 
             res.status(200).json({ success: true, message: 'Trade exit recorded' });
