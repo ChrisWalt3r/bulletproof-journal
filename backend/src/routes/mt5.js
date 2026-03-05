@@ -187,6 +187,7 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
             tp,
             image_base64,
             image_filename,
+            dealTime, // Actual deal execution time from MT5 (format: "YYYY.MM.DD HH:MM:SS")
             accountId: rawAccountId // Sent by EA as "Journal Account ID"
         } = req.body;
 
@@ -275,7 +276,17 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                 [positionId || ticket]
             );
 
-            const now = new Date();
+            // Parse deal time from MT5 (format: "YYYY.MM.DD HH:MM:SS") or fall back to now
+            let entryTimestamp = new Date();
+            if (dealTime) {
+                // MT5 sends "YYYY.MM.DD HH:MM:SS" — convert dots to dashes for ISO parsing
+                const isoStr = dealTime.replace(/\./g, '-').replace(' ', 'T') + 'Z';
+                const parsed = new Date(isoStr);
+                if (!isNaN(parsed.getTime())) {
+                    entryTimestamp = parsed;
+                }
+            }
+
             const title = `MT5: ${type} ${symbol}`;
             const content = `Automated Entry: ${type} ${symbol} @ ${price}`;
             const assetType = classifyAsset(symbol);
@@ -290,7 +301,8 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                         stop_loss = COALESCE($4, stop_loss),
                         take_profit = COALESCE($5, take_profit),
                         mt5_position_id = COALESCE($6, mt5_position_id),
-                        asset_type = COALESCE($8, asset_type)
+                        asset_type = COALESCE($8, asset_type),
+                        created_at = COALESCE($9, created_at)
                     WHERE id = $7
                 `, [
                     title,
@@ -300,7 +312,8 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                     tp || null,
                     positionId || null,
                     existing.id,
-                    assetType
+                    assetType,
+                    dealTime ? entryTimestamp.toISOString() : null
                 ]);
 
                 return res.status(200).json({ success: true, message: 'Trade entry updated', entryId: existing.id });
@@ -312,7 +325,7 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                     mt5_ticket, mt5_position_id, symbol, direction, volume, 
                     entry_price, stop_loss, take_profit, before_image_url,
                     asset_type, following_plan, created_at, updated_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $17)
                 RETURNING id
             `, [
                 title,
@@ -330,13 +343,24 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                 tp || null,
                 imageUrl,
                 assetType,
-                null
+                null,
+                entryTimestamp.toISOString()
             ]);
 
             res.status(201).json({ success: true, message: 'Trade entry recorded', entryId: result.rows[0].id, accountId });
 
         } else if (action === 'EXIT') {
             const totalPnL = parseFloat(profit || 0) + parseFloat(commission || 0) + parseFloat(swap || 0);
+
+            // Parse deal time from MT5 for orphaned exits
+            let exitTimestamp = new Date();
+            if (dealTime) {
+                const isoStr = dealTime.replace(/\./g, '-').replace(' ', 'T') + 'Z';
+                const parsed = new Date(isoStr);
+                if (!isNaN(parsed.getTime())) {
+                    exitTimestamp = parsed;
+                }
+            }
 
             // Match by position ID (same for entry and exit deals), fallback to ticket
             const matchId = positionId || ticket;
@@ -361,7 +385,7 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                             mt5_ticket, mt5_position_id, symbol, direction, after_image_url, 
                             exit_price, pnl, commission, swap, balance,
                             asset_type, following_plan, mt5_exit_ticket, created_at, updated_at
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), NOW())
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $19)
                         RETURNING id
                     `, [
                         `MT5 Exit: ${type} ${symbol}`,
@@ -381,7 +405,8 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                         balance || 0,
                         assetType,
                         null,
-                        ticket
+                        ticket,
+                        exitTimestamp.toISOString()
                     ]);
                     return res.status(200).json({ success: true, message: 'Orphaned exit recorded', entryId: result.rows[0].id });
                 }

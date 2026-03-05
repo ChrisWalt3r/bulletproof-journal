@@ -346,6 +346,7 @@ void SendSyncDeal(ulong deal_ticket, string action)
    double swap = HistoryDealGetDouble(deal_ticket, DEAL_SWAP);
    string comment = HistoryDealGetString(deal_ticket, DEAL_COMMENT);
    long positionId = HistoryDealGetInteger(deal_ticket, DEAL_POSITION_ID);
+   datetime dealTime = (datetime)HistoryDealGetInteger(deal_ticket, DEAL_TIME);
 
    // SL/TP may not be available for closed positions — try anyway
    double sl = 0, tp = 0;
@@ -373,7 +374,8 @@ void SendSyncDeal(ulong deal_ticket, string action)
    json += "\"balance\":\"" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2) + "\",";
    json += "\"sl\":\"" + DoubleToString(sl, digits) + "\",";
    json += "\"tp\":\"" + DoubleToString(tp, digits) + "\",";
-   json += "\"comment\":\"" + EscapeJsonString(comment) + "\"";
+   json += "\"comment\":\"" + EscapeJsonString(comment) + "\",";
+   json += "\"dealTime\":\"" + TimeToString(dealTime, TIME_DATE|TIME_SECONDS) + "\"";
    json += "}";
 
    string headers = "Content-Type: application/json\r\n";
@@ -523,6 +525,7 @@ void CaptureAndSend(ulong deal_ticket, string action)
    double swap = HistoryDealGetDouble(deal_ticket, DEAL_SWAP);
    string comment = HistoryDealGetString(deal_ticket, DEAL_COMMENT);
    long positionId = HistoryDealGetInteger(deal_ticket, DEAL_POSITION_ID);
+   datetime dealTime = (datetime)HistoryDealGetInteger(deal_ticket, DEAL_TIME);
 
    // Get SL/TP from the open position (only available while position is open)
    double sl = 0, tp = 0;
@@ -556,6 +559,7 @@ void CaptureAndSend(ulong deal_ticket, string action)
    json += "\"sl\":\"" + DoubleToString(sl, digits) + "\",";
    json += "\"tp\":\"" + DoubleToString(tp, digits) + "\",";
    json += "\"comment\":\"" + EscapeJsonString(comment) + "\",";
+   json += "\"dealTime\":\"" + TimeToString(dealTime, TIME_DATE|TIME_SECONDS) + "\",";
    json += "\"image_filename\":\"" + filename + "\",";
    json += "\"image_base64\":\"data:image/png;base64," + base64Image + "\"";
    json += "}";
