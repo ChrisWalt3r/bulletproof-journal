@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Updates from 'expo-updates';
 import { useAccount } from '../context/AccountContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -36,11 +37,52 @@ const SettingsScreen = ({ navigation, route }) => {
     color: '#4A90E2',
     starting_balance: '',
   });
+  const [updateStatus, setUpdateStatus] = useState('idle'); // idle | checking | available | downloading | upToDate | error
 
   useEffect(() => {
     // Refresh accounts when component mounts
     fetchAccounts();
   }, []);
+
+  const handleCheckForUpdates = async () => {
+    if (__DEV__) {
+      Alert.alert('Dev Mode', 'OTA updates are not available in development. Build and publish with `eas update` to test.');
+      return;
+    }
+
+    try {
+      setUpdateStatus('checking');
+      const update = await Updates.checkForUpdateAsync();
+
+      if (update.isAvailable) {
+        setUpdateStatus('downloading');
+        await Updates.fetchUpdateAsync();
+        setUpdateStatus('available');
+
+        Alert.alert(
+          'Update Ready',
+          'A new version has been downloaded. Restart the app to apply the update.',
+          [
+            { text: 'Later', style: 'cancel', onPress: () => setUpdateStatus('idle') },
+            {
+              text: 'Restart Now',
+              onPress: async () => {
+                await Updates.reloadAsync();
+              }
+            }
+          ]
+        );
+      } else {
+        setUpdateStatus('upToDate');
+        setTimeout(() => setUpdateStatus('idle'), 3000);
+      }
+    } catch (error) {
+      console.error('Error checking for updates:', error);
+      setUpdateStatus('error');
+      Alert.alert('Update Error', 'Failed to check for updates. Please try again later.');
+      setTimeout(() => setUpdateStatus('idle'), 3000);
+    }
+  };
 
   const addAccount = async () => {
     if (!newAccount.name.trim()) {
@@ -251,6 +293,65 @@ const SettingsScreen = ({ navigation, route }) => {
             <Text style={styles.infoDescription}>
               Professional forex trading journal designed to help you track your trades, analyze performance, and develop disciplined trading habits.
             </Text>
+          </View>
+        </View>
+
+        {/* App Updates */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>App Updates</Text>
+          <View style={styles.updateCard}>
+            <View style={styles.updateInfo}>
+              <Ionicons
+                name={
+                  updateStatus === 'upToDate' ? 'checkmark-circle' :
+                  updateStatus === 'available' ? 'download' :
+                  updateStatus === 'error' ? 'alert-circle' :
+                  'cloud-download-outline'
+                }
+                size={28}
+                color={
+                  updateStatus === 'upToDate' ? '#50C878' :
+                  updateStatus === 'available' ? '#667eea' :
+                  updateStatus === 'error' ? '#FF6B6B' :
+                  '#4A90E2'
+                }
+              />
+              <View style={styles.updateTextContainer}>
+                <Text style={styles.updateTitle}>
+                  {updateStatus === 'checking' ? 'Checking for updates...' :
+                   updateStatus === 'downloading' ? 'Downloading update...' :
+                   updateStatus === 'available' ? 'Update ready!' :
+                   updateStatus === 'upToDate' ? 'You\'re up to date' :
+                   updateStatus === 'error' ? 'Update check failed' :
+                   'Check for Updates'}
+                </Text>
+                <Text style={styles.updateSubtitle}>
+                  {updateStatus === 'checking' || updateStatus === 'downloading'
+                    ? 'Please wait...'
+                    : updateStatus === 'upToDate'
+                    ? 'You have the latest version'
+                    : updateStatus === 'available'
+                    ? 'Restart to apply changes'
+                    : 'Tap to check for new features & fixes'}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.updateButton,
+                (updateStatus === 'checking' || updateStatus === 'downloading') && styles.updateButtonDisabled
+              ]}
+              onPress={handleCheckForUpdates}
+              disabled={updateStatus === 'checking' || updateStatus === 'downloading'}
+            >
+              {(updateStatus === 'checking' || updateStatus === 'downloading') ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.updateButtonText}>
+                  {updateStatus === 'available' ? 'Restart' : 'Check'}
+                </Text>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -536,6 +637,56 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     lineHeight: 20,
+  },
+  // Update section styles
+  updateCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  updateInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  updateTextContainer: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  updateTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#333',
+  },
+  updateSubtitle: {
+    fontSize: 12,
+    color: '#94a3b8',
+    marginTop: 2,
+  },
+  updateButton: {
+    backgroundColor: '#667eea',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginLeft: 12,
+    minWidth: 70,
+    alignItems: 'center',
+  },
+  updateButtonDisabled: {
+    backgroundColor: '#a0aee8',
+  },
+  updateButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
   },
   calendarHeader: {
     flexDirection: 'row',

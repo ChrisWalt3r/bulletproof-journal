@@ -20,7 +20,7 @@
         "backgroundColor": "#667eea"
       },
       "package": "com.bulletproofjournal.app",
-      "edgeToEdgeEnabled": true,
+      "edgeToEdgeEnabled": false,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE"
@@ -37,8 +37,17 @@
           "cameraPermission": "The app accesses your camera to let you take photos for your trading journal entries."
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-system-ui"
     ],
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 5000
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "extra": {
       "eas": {
         "projectId": "97f6953f-1ba8-47e2-b436-557a009364d0"
