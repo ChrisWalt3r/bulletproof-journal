@@ -1,16 +1,12 @@
-// Stub database service for features not yet migrated to cloud
-// Trading Plans and Criteria will use AsyncStorage temporarily
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const PLANS_KEY = 'trading_plans';
-const CRITERIA_KEY = 'trading_criteria';
+// Cloud database service — all plans and criteria are stored in Supabase via the backend API
+import { plansAPI } from '../services/api';
 
 // ============ Trading Plans ============
 
 export const getTradingPlans = async () => {
   try {
-    const data = await AsyncStorage.getItem(PLANS_KEY);
-    return data ? JSON.parse(data) : [];
+    const response = await plansAPI.getPlans();
+    return response.data || [];
   } catch (error) {
     console.error('Error getting trading plans:', error);
     return [];
@@ -19,15 +15,8 @@ export const getTradingPlans = async () => {
 
 export const createTradingPlan = async (name) => {
   try {
-    const plans = await getTradingPlans();
-    const newPlan = {
-      id: Date.now(),
-      name,
-      created_at: new Date().toISOString()
-    };
-    plans.push(newPlan);
-    await AsyncStorage.setItem(PLANS_KEY, JSON.stringify(plans));
-    return newPlan;
+    const response = await plansAPI.createPlan(name);
+    return response.data;
   } catch (error) {
     console.error('Error creating trading plan:', error);
     throw error;
@@ -36,14 +25,8 @@ export const createTradingPlan = async (name) => {
 
 export const renameTradingPlan = async (planId, newName) => {
   try {
-    const plans = await getTradingPlans();
-    const index = plans.findIndex(p => p.id === planId);
-    if (index !== -1) {
-      plans[index].name = newName;
-      await AsyncStorage.setItem(PLANS_KEY, JSON.stringify(plans));
-      return plans[index];
-    }
-    throw new Error('Plan not found');
+    const response = await plansAPI.renamePlan(planId, newName);
+    return response.data;
   } catch (error) {
     console.error('Error renaming trading plan:', error);
     throw error;
@@ -52,15 +35,7 @@ export const renameTradingPlan = async (planId, newName) => {
 
 export const deleteTradingPlan = async (planId) => {
   try {
-    const plans = await getTradingPlans();
-    const filtered = plans.filter(p => p.id !== planId);
-    await AsyncStorage.setItem(PLANS_KEY, JSON.stringify(filtered));
-
-    // Also delete criteria for this plan
-    const criteria = await getAllCriteria();
-    const filteredCriteria = criteria.filter(c => c.plan_id !== planId);
-    await AsyncStorage.setItem(CRITERIA_KEY, JSON.stringify(filteredCriteria));
-
+    await plansAPI.deletePlan(planId);
     return true;
   } catch (error) {
     console.error('Error deleting trading plan:', error);
@@ -70,28 +45,10 @@ export const deleteTradingPlan = async (planId) => {
 
 // ============ Criteria ============
 
-const getAllCriteria = async () => {
-  try {
-    const data = await AsyncStorage.getItem(CRITERIA_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch (error) {
-    console.error('Error getting criteria:', error);
-    return [];
-  }
-};
-
 export const getCriteriaForPlan = async (planId) => {
   try {
-    const criteria = await getAllCriteria();
-    const planCriteria = criteria.filter(c => c.plan_id === planId);
-
-    // Sort by position if available, or keep order
-    return planCriteria.sort((a, b) => {
-      if (typeof a.position === 'number' && typeof b.position === 'number') {
-        return a.position - b.position;
-      }
-      return 0;
-    });
+    const response = await plansAPI.getCriteria(planId);
+    return response.data || [];
   } catch (error) {
     console.error('Error getting criteria for plan:', error);
     return [];
@@ -100,65 +57,37 @@ export const getCriteriaForPlan = async (planId) => {
 
 export const addCriterionToPlan = async (planId, text) => {
   try {
-    const criteria = await getAllCriteria();
-    // Calculate next position
-    const planCriteria = criteria.filter(c => c.plan_id === planId);
-    const maxPos = planCriteria.reduce((max, c) => Math.max(max, c.position || 0), -1);
-
-    const newCriterion = {
-      id: Date.now(),
-      plan_id: planId,
-      text,
-      checked: false,
-      position: maxPos + 1,
-      created_at: new Date().toISOString()
-    };
-    criteria.push(newCriterion);
-    await AsyncStorage.setItem(CRITERIA_KEY, JSON.stringify(criteria));
-    return newCriterion;
+    const response = await plansAPI.addCriterion(planId, text);
+    return response.data;
   } catch (error) {
     console.error('Error adding criterion:', error);
     throw error;
   }
 };
 
-export const updateCriterionText = async (criterionId, newText) => {
+export const updateCriterionText = async (criterionId, newText, planId) => {
   try {
-    const criteria = await getAllCriteria();
-    const index = criteria.findIndex(c => c.id === criterionId);
-    if (index !== -1) {
-      criteria[index].text = newText;
-      await AsyncStorage.setItem(CRITERIA_KEY, JSON.stringify(criteria));
-      return criteria[index];
-    }
-    throw new Error('Criterion not found');
+    const response = await plansAPI.updateCriterionText(planId, criterionId, newText);
+    return response.data;
   } catch (error) {
     console.error('Error updating criterion text:', error);
     throw error;
   }
 };
 
-export const toggleCriterionChecked = async (criterionId, checked) => {
+export const toggleCriterionChecked = async (criterionId, checked, planId) => {
   try {
-    const criteria = await getAllCriteria();
-    const index = criteria.findIndex(c => c.id === criterionId);
-    if (index !== -1) {
-      criteria[index].checked = checked;
-      await AsyncStorage.setItem(CRITERIA_KEY, JSON.stringify(criteria));
-      return criteria[index];
-    }
-    throw new Error('Criterion not found');
+    const response = await plansAPI.toggleCriterion(planId, criterionId, checked);
+    return response.data;
   } catch (error) {
     console.error('Error toggling criterion:', error);
     throw error;
   }
 };
 
-export const deleteCriterion = async (criterionId) => {
+export const deleteCriterion = async (criterionId, planId) => {
   try {
-    const criteria = await getAllCriteria();
-    const filtered = criteria.filter(c => c.id !== criterionId);
-    await AsyncStorage.setItem(CRITERIA_KEY, JSON.stringify(filtered));
+    await plansAPI.deleteCriterion(planId, criterionId);
     return true;
   } catch (error) {
     console.error('Error deleting criterion:', error);
@@ -168,24 +97,8 @@ export const deleteCriterion = async (criterionId) => {
 
 export const resetPlanCriteria = async (planId) => {
   try {
-    const criteria = await getAllCriteria();
-    let updated = false;
-
-    // Create new array with updated checked status for specific plan
-    const newCriteria = criteria.map(c => {
-      if (c.plan_id === planId && c.checked) {
-        updated = true;
-        return { ...c, checked: false };
-      }
-      return c;
-    });
-
-    if (updated) {
-      await AsyncStorage.setItem(CRITERIA_KEY, JSON.stringify(newCriteria));
-    }
-
-    // Return the updated criteria for this plan
-    return newCriteria.filter(c => c.plan_id === planId);
+    const response = await plansAPI.resetCriteria(planId);
+    return response.data || [];
   } catch (error) {
     console.error('Error resetting plan criteria:', error);
     throw error;
@@ -194,20 +107,12 @@ export const resetPlanCriteria = async (planId) => {
 
 export const reorderCriteria = async (planId, reorderedCriteria) => {
   try {
-    const allCriteria = await getAllCriteria();
-    const otherCriteria = allCriteria.filter(c => c.plan_id !== planId);
-
-    // Update positions based on new order
-    const updatedPlanCriteria = reorderedCriteria.map((c, index) => ({
-      ...c,
+    const order = reorderedCriteria.map((c, index) => ({
+      id: c.id,
       position: index
     }));
-
-    // Combine and save
-    const finalCriteria = [...otherCriteria, ...updatedPlanCriteria];
-    await AsyncStorage.setItem(CRITERIA_KEY, JSON.stringify(finalCriteria));
-
-    return updatedPlanCriteria;
+    const response = await plansAPI.reorderCriteria(planId, order);
+    return response.data || [];
   } catch (error) {
     console.error('Error reordering criteria:', error);
     throw error;

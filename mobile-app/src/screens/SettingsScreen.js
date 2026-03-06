@@ -154,7 +154,7 @@ const SettingsScreen = ({ navigation, route }) => {
             onPress={() => navigation.navigate('AccountGrowth')}
           >
             <Ionicons name="trending-up" size={24} color="#50C878" />
-            <Text style={styles.quickActionText}>Account Growth</Text>
+            <Text style={styles.quickActionText}>Equity Curve</Text>
             <Ionicons name="chevron-forward" size={20} color="#666" />
           </TouchableOpacity>
         </View>

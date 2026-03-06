@@ -112,6 +112,26 @@ const createTables = async () => {
       mt5_exit_ticket BIGINT,
       account_id INTEGER REFERENCES accounts(id),
       deleted_at TIMESTAMPTZ DEFAULT NOW()
+    )`,
+
+    // Trading plans (cloud-synced, per user)
+    `CREATE TABLE IF NOT EXISTS trading_plans (
+      id SERIAL PRIMARY KEY,
+      auth_id UUID NOT NULL,
+      name TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`,
+
+    // Plan criteria / rules (cloud-synced, per plan)
+    `CREATE TABLE IF NOT EXISTS plan_criteria (
+      id SERIAL PRIMARY KEY,
+      plan_id INTEGER NOT NULL REFERENCES trading_plans(id) ON DELETE CASCADE,
+      text TEXT NOT NULL,
+      checked BOOLEAN DEFAULT false,
+      position INTEGER DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
     )`
   ];
 
@@ -133,7 +153,10 @@ const createIndexes = async () => {
     'CREATE INDEX IF NOT EXISTS idx_journal_entries_mt5_position ON journal_entries(mt5_position_id)',
     'CREATE INDEX IF NOT EXISTS idx_deleted_mt5_ticket ON deleted_mt5_entries(mt5_ticket)',
     'CREATE INDEX IF NOT EXISTS idx_deleted_mt5_position ON deleted_mt5_entries(mt5_position_id)',
-    'CREATE INDEX IF NOT EXISTS idx_deleted_mt5_exit_ticket ON deleted_mt5_entries(mt5_exit_ticket)'
+    'CREATE INDEX IF NOT EXISTS idx_deleted_mt5_exit_ticket ON deleted_mt5_entries(mt5_exit_ticket)',
+    'CREATE INDEX IF NOT EXISTS idx_trading_plans_auth ON trading_plans(auth_id)',
+    'CREATE INDEX IF NOT EXISTS idx_plan_criteria_plan ON plan_criteria(plan_id)',
+    'CREATE INDEX IF NOT EXISTS idx_plan_criteria_position ON plan_criteria(plan_id, position)'
   ];
 
   for (const indexQuery of indexes) {

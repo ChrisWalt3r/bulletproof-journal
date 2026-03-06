@@ -226,7 +226,7 @@ const CriteriaScreen = () => {
 
   const handleToggleCriterion = async (criterionId, currentChecked) => {
     try {
-      const updated = await toggleCriterionChecked(criterionId, !currentChecked);
+      const updated = await toggleCriterionChecked(criterionId, !currentChecked, activePlanId);
       setCriteriaByPlan(prev => ({
         ...prev,
         [activePlanId]: (prev[activePlanId] || []).map(c =>
@@ -252,7 +252,7 @@ const CriteriaScreen = () => {
     }
 
     try {
-      const updated = await updateCriterionText(editingCriterionId, trimmed);
+      const updated = await updateCriterionText(editingCriterionId, trimmed, activePlanId);
       setCriteriaByPlan(prev => ({
         ...prev,
         [activePlanId]: (prev[activePlanId] || []).map(c =>
@@ -284,7 +284,7 @@ const CriteriaScreen = () => {
 
   const handleDeleteCriterion = async (criterionId) => {
     try {
-      await deleteCriterion(criterionId);
+      await deleteCriterion(criterionId, activePlanId);
       setCriteriaByPlan(prev => ({
         ...prev,
         [activePlanId]: (prev[activePlanId] || []).filter(c => c.id !== criterionId),
@@ -792,7 +792,7 @@ const CriteriaScreen = () => {
 
           <TouchableOpacity
             style={styles.deleteButton}
-            onPress={() => handleDeleteCriterion(item.id)}
+            onPress={() => confirmDeleteCriterion(item.id)}
           >
             <Ionicons name="close-circle-outline" size={20} color="#ff6b6b" />
           </TouchableOpacity>

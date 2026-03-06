@@ -221,7 +221,7 @@ const HomeScreen = ({ navigation }) => {
 
   const dashboardItems = [
     {
-      title: 'Account Growth',
+      title: 'Equity Curve',
       subtitle: 'Visualize capital growth',
       icon: 'trending-up',
       colors: ['#667eea', '#764ba2'],

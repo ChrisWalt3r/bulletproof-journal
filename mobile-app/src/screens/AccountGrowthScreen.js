@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     View,
     Text,
@@ -7,7 +7,9 @@ import {
     Dimensions,
     ActivityIndicator,
     TouchableOpacity,
-    RefreshControl
+    RefreshControl,
+    Modal,
+    Animated,
 } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,8 +17,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAccount } from '../context/AccountContext';
 import { journalAPI } from '../services/api';
 import { useFocusEffect } from '@react-navigation/native';
+import { formatKampalaDate, formatKampalaTime, formatKampalaDateTime } from '../utils/dateUtils';
 
 const { width: screenWidth } = Dimensions.get('window');
+
+const KAMPALA_TZ = 'Africa/Kampala';
 
 const TIME_FILTERS = [
     { key: 'WEEK', label: '1W' },
@@ -26,14 +31,24 @@ const TIME_FILTERS = [
 ];
 
 const getFilterStartDate = (filterKey) => {
+    // Build "now" in Kampala timezone
     const now = new Date();
     switch (filterKey) {
-        case 'WEEK':
-            return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
-        case 'MONTH':
-            return new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-        case 'YEAR':
-            return new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+        case 'WEEK': {
+            const d = new Date(now);
+            d.setDate(d.getDate() - 7);
+            return d;
+        }
+        case 'MONTH': {
+            const d = new Date(now);
+            d.setMonth(d.getMonth() - 1);
+            return d;
+        }
+        case 'YEAR': {
+            const d = new Date(now);
+            d.setFullYear(d.getFullYear() - 1);
+            return d;
+        }
         case 'ALL':
         default:
             return null;
@@ -47,6 +62,9 @@ const AccountGrowthScreen = ({ navigation }) => {
     const [chartData, setChartData] = useState(null);
     const [timeFilter, setTimeFilter] = useState('ALL');
     const [allEntries, setAllEntries] = useState([]);
+    const [filteredTradesForChart, setFilteredTradesForChart] = useState([]);
+    const [selectedTrade, setSelectedTrade] = useState(null);
+    const [tooltipPos, setTooltipPos] = useState(null);
     const [stats, setStats] = useState({
         startBalance: 0,
         currentBalance: 0,
@@ -76,12 +94,14 @@ const AccountGrowthScreen = ({ navigation }) => {
     };
 
     useEffect(() => {
+        dismissTooltip();
         computeStats();
     }, [allEntries, timeFilter, startingBalance]);
 
     const computeStats = () => {
         if (!allEntries.length) {
             setChartData(null);
+            setFilteredTradesForChart([]);
             setStats({
                 startBalance: startingBalance,
                 currentBalance: startingBalance,
@@ -96,14 +116,13 @@ const AccountGrowthScreen = ({ navigation }) => {
         }
 
         // Only closed trades (have pnl), sorted by EXIT time (updated_at)
-        // This is critical: balance/pnl are recorded at exit, so updated_at
-        // is the correct chronological ordering, not created_at (open time).
         const allClosed = allEntries
             .filter(e => e.pnl !== null && e.pnl !== undefined)
             .sort((a, b) => new Date(a.updated_at) - new Date(b.updated_at));
 
         if (allClosed.length === 0) {
             setChartData(null);
+            setFilteredTradesForChart([]);
             setStats({
                 startBalance: startingBalance,
                 currentBalance: startingBalance,
@@ -127,27 +146,34 @@ const AccountGrowthScreen = ({ navigation }) => {
             filteredTrades = allClosed.filter(e => new Date(e.updated_at) >= filterStart);
         }
 
+        // Store filtered trades so we can look up details when a dot is tapped
+        setFilteredTradesForChart(filteredTrades);
+
         // Overall stats (always from all closed trades, not filter-dependent)
         const totalPnL = allClosed.reduce((sum, e) => sum + (parseFloat(e.pnl) || 0), 0);
         const overallBalance = startingBalance + totalPnL;
         const netProfit = totalPnL;
         const growthPct = startingBalance > 0 ? (netProfit / startingBalance) * 100 : 0;
 
-        // Build equity curve using cumulative PnL (not raw balance values).
-        // Raw balance can be misleading if entries came from different MT5 accounts
-        // or if trades overlapped. Cumulative PnL from starting_balance gives
-        // a true performance curve.
+        // Build equity curve — each dot = one actual trade
+        // No extra "Start" point — dots match trade count exactly
         const preFilterPnL = preFilterTrades.reduce((sum, e) => sum + (parseFloat(e.pnl) || 0), 0);
         const periodStartBal = startingBalance + preFilterPnL;
 
-        const chartPoints = [periodStartBal];
-        const chartLabels = ['Start'];
+        const chartPoints = [];
+        const chartLabels = [];
         let runningBalance = periodStartBal;
 
         filteredTrades.forEach(item => {
             runningBalance += parseFloat(item.pnl) || 0;
+            // Format date label in Kampala timezone
             const date = new Date(item.updated_at);
-            chartLabels.push(`${date.getDate()}/${date.getMonth() + 1}`);
+            const label = date.toLocaleDateString('en-GB', {
+                day: 'numeric',
+                month: 'short',
+                timeZone: KAMPALA_TZ,
+            });
+            chartLabels.push(label);
             chartPoints.push(runningBalance);
         });
 
@@ -163,6 +189,12 @@ const AccountGrowthScreen = ({ navigation }) => {
             setChartData({
                 labels: displayLabels,
                 datasets: [{ data: chartPoints }],
+            });
+        } else if (chartPoints.length === 1) {
+            // Single trade — show it as a flat line so the dot is visible
+            setChartData({
+                labels: ['', chartLabels[0]],
+                datasets: [{ data: [chartPoints[0], chartPoints[0]] }],
             });
         } else {
             setChartData(null);
@@ -198,13 +230,123 @@ const AccountGrowthScreen = ({ navigation }) => {
         fetchAllEntries();
     }, [currentAccount]);
 
+    const handleDataPointClick = ({ index, value, x, y }) => {
+        // For single-trade charts, index 0 is the dummy point, index 1 is the trade
+        const trade = filteredTradesForChart.length === 1
+            ? filteredTradesForChart[0]
+            : filteredTradesForChart[index];
+
+        if (!trade) return;
+
+        // If tapping the same dot, dismiss
+        if (selectedTrade && selectedTrade.id === trade.id) {
+            setSelectedTrade(null);
+            setTooltipPos(null);
+            return;
+        }
+
+        setSelectedTrade(trade);
+        setTooltipPos({ x, y });
+    };
+
+    const dismissTooltip = () => {
+        setSelectedTrade(null);
+        setTooltipPos(null);
+    };
+
+    const renderTradeTooltip = () => {
+        if (!selectedTrade || !tooltipPos) return null;
+
+        const pnl = parseFloat(selectedTrade.pnl) || 0;
+        const isWin = pnl > 0;
+        const direction = selectedTrade.direction || '—';
+        const symbol = selectedTrade.symbol || selectedTrade.instrument || '—';
+        const exitDate = formatKampalaDate(selectedTrade.updated_at, { weekday: 'short' });
+        const exitTime = formatKampalaTime(selectedTrade.updated_at);
+
+        // Position tooltip: try to keep it on screen
+        const tooltipWidth = 220;
+        let left = tooltipPos.x - tooltipWidth / 2;
+        if (left < 10) left = 10;
+        if (left + tooltipWidth > screenWidth - 30) left = screenWidth - 30 - tooltipWidth;
+        const top = tooltipPos.y > 140 ? tooltipPos.y - 145 : tooltipPos.y + 20;
+
+        return (
+            <TouchableOpacity
+                style={styles.tooltipOverlay}
+                activeOpacity={1}
+                onPress={dismissTooltip}
+            >
+                <View style={[styles.tradeTooltip, { left, top }]}>
+                    {/* Arrow */}
+                    <View style={[
+                        styles.tooltipArrow,
+                        tooltipPos.y > 140
+                            ? { bottom: -6, alignSelf: 'center' }
+                            : { top: -6, alignSelf: 'center', transform: [{ rotate: '180deg' }] }
+                    ]} />
+
+                    <View style={styles.tooltipHeader}>
+                        <Text style={styles.tooltipSymbol}>{symbol}</Text>
+                        <View style={[
+                            styles.tooltipBadge,
+                            { backgroundColor: direction === 'BUY' ? '#e8f5e9' : '#fce4ec' }
+                        ]}>
+                            <Text style={[
+                                styles.tooltipBadgeText,
+                                { color: direction === 'BUY' ? '#2e7d32' : '#c62828' }
+                            ]}>{direction}</Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.tooltipDivider} />
+
+                    <View style={styles.tooltipRow}>
+                        <Text style={styles.tooltipLabel}>Result</Text>
+                        <View style={[
+                            styles.resultBadge,
+                            { backgroundColor: isWin ? '#e8f5e9' : '#fce4ec' }
+                        ]}>
+                            <Text style={[
+                                styles.resultText,
+                                { color: isWin ? '#2e7d32' : '#c62828' }
+                            ]}>
+                                {isWin ? 'WIN' : pnl === 0 ? 'BE' : 'LOSS'}
+                            </Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.tooltipRow}>
+                        <Text style={styles.tooltipLabel}>P&L</Text>
+                        <Text style={[
+                            styles.tooltipValue,
+                            { color: isWin ? '#2e7d32' : pnl === 0 ? '#666' : '#c62828' }
+                        ]}>
+                            {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
+                        </Text>
+                    </View>
+
+                    <View style={styles.tooltipRow}>
+                        <Text style={styles.tooltipLabel}>Date</Text>
+                        <Text style={styles.tooltipValue}>{exitDate}</Text>
+                    </View>
+
+                    <View style={styles.tooltipRow}>
+                        <Text style={styles.tooltipLabel}>Time</Text>
+                        <Text style={styles.tooltipValue}>{exitTime}</Text>
+                    </View>
+                </View>
+            </TouchableOpacity>
+        );
+    };
+
     const renderChart = () => {
         if (!chartData || chartData.datasets[0].data.length < 2) {
             return (
                 <View style={styles.emptyContainer}>
                     <Ionicons name="bar-chart-outline" size={64} color="#ccc" />
                     <Text style={styles.emptyText}>Not enough data to graph.</Text>
-                    <Text style={styles.emptySubText}>Record at least 2 trades with automated exits.</Text>
+                    <Text style={styles.emptySubText}>Record at least 1 closed trade.</Text>
                 </View>
             );
         }
@@ -227,8 +369,8 @@ const AccountGrowthScreen = ({ navigation }) => {
                         labelColor: (opacity = 1) => `rgba(100, 100, 100, ${opacity})`,
                         style: { borderRadius: 16 },
                         propsForDots: {
-                            r: "3",
-                            strokeWidth: "1.5",
+                            r: "4",
+                            strokeWidth: "2",
                             stroke: stats.netProfit >= 0 ? "#50C878" : "#FF6B6B"
                         },
                         propsForBackgroundLines: {
@@ -238,7 +380,18 @@ const AccountGrowthScreen = ({ navigation }) => {
                     }}
                     bezier
                     style={{ marginVertical: 8, borderRadius: 16 }}
+                    onDataPointClick={handleDataPointClick}
+                    getDotColor={(dataPoint, dataPointIndex) => {
+                        // For single-trade charts, first dot is dummy
+                        const trade = filteredTradesForChart.length === 1
+                            ? (dataPointIndex === 0 ? null : filteredTradesForChart[0])
+                            : filteredTradesForChart[dataPointIndex];
+                        if (!trade) return '#ccc';
+                        const pnl = parseFloat(trade.pnl) || 0;
+                        return pnl >= 0 ? '#50C878' : '#FF6B6B';
+                    }}
                 />
+                {renderTradeTooltip()}
             </View>
         );
     };
@@ -255,7 +408,7 @@ const AccountGrowthScreen = ({ navigation }) => {
                 >
                     <Ionicons name="arrow-back" size={24} color="#fff" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Account Growth</Text>
+                <Text style={styles.headerTitle}>Equity Curve</Text>
                 <View style={{ width: 40 }} />
             </LinearGradient>
 
@@ -530,7 +683,88 @@ const styles = StyleSheet.create({
         backgroundColor: 'transparent',
         alignItems: 'center',
         borderRadius: 16,
-        overflow: 'hidden',
+        overflow: 'visible',
+        position: 'relative',
+    },
+    tooltipOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        zIndex: 999,
+    },
+    tradeTooltip: {
+        position: 'absolute',
+        width: 220,
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 14,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 12,
+        borderWidth: 1,
+        borderColor: '#f0f0f5',
+        zIndex: 1000,
+    },
+    tooltipArrow: {
+        position: 'absolute',
+        width: 12,
+        height: 12,
+        backgroundColor: '#fff',
+        transform: [{ rotate: '45deg' }],
+        borderWidth: 1,
+        borderColor: '#f0f0f5',
+        borderTopWidth: 0,
+        borderLeftWidth: 0,
+    },
+    tooltipHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    tooltipSymbol: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: '#333',
+    },
+    tooltipBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 6,
+    },
+    tooltipBadgeText: {
+        fontSize: 11,
+        fontWeight: '800',
+    },
+    tooltipDivider: {
+        height: 1,
+        backgroundColor: '#f0f0f5',
+        marginBottom: 8,
+    },
+    tooltipRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 5,
+    },
+    tooltipLabel: {
+        fontSize: 12,
+        color: '#94a3b8',
+        fontWeight: '600',
+    },
+    tooltipValue: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#333',
+    },
+    resultBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 6,
+    },
+    resultText: {
+        fontSize: 11,
+        fontWeight: '800',
     },
     emptyContainer: {
         alignItems: 'center',

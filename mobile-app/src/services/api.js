@@ -268,4 +268,88 @@ export const accountsAPI = {
   },
 };
 
+// ===================== PLANS & CRITERIA API =====================
+export const plansAPI = {
+  // Trading Plans
+  getPlans: async () => {
+    const data = await fetchJson(`${API_URL}/plans`);
+    return data;
+  },
+
+  createPlan: async (name) => {
+    const data = await fetchJson(`${API_URL}/plans`, {
+      method: 'POST',
+      body: JSON.stringify({ name })
+    });
+    return data;
+  },
+
+  renamePlan: async (planId, name) => {
+    const data = await fetchJson(`${API_URL}/plans/${planId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name })
+    });
+    return data;
+  },
+
+  deletePlan: async (planId) => {
+    const data = await fetchJson(`${API_URL}/plans/${planId}`, {
+      method: 'DELETE'
+    });
+    return data;
+  },
+
+  // Criteria
+  getCriteria: async (planId) => {
+    const data = await fetchJson(`${API_URL}/plans/${planId}/criteria`);
+    return data;
+  },
+
+  addCriterion: async (planId, text) => {
+    const data = await fetchJson(`${API_URL}/plans/${planId}/criteria`, {
+      method: 'POST',
+      body: JSON.stringify({ text })
+    });
+    return data;
+  },
+
+  updateCriterionText: async (planId, criterionId, text) => {
+    const data = await fetchJson(`${API_URL}/plans/${planId}/criteria/${criterionId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ text })
+    });
+    return data;
+  },
+
+  toggleCriterion: async (planId, criterionId, checked) => {
+    const data = await fetchJson(`${API_URL}/plans/${planId}/criteria/${criterionId}/toggle`, {
+      method: 'PATCH',
+      body: JSON.stringify({ checked })
+    });
+    return data;
+  },
+
+  deleteCriterion: async (planId, criterionId) => {
+    const data = await fetchJson(`${API_URL}/plans/${planId}/criteria/${criterionId}`, {
+      method: 'DELETE'
+    });
+    return data;
+  },
+
+  reorderCriteria: async (planId, order) => {
+    const data = await fetchJson(`${API_URL}/plans/${planId}/criteria/reorder`, {
+      method: 'POST',
+      body: JSON.stringify({ order })
+    });
+    return data;
+  },
+
+  resetCriteria: async (planId) => {
+    const data = await fetchJson(`${API_URL}/plans/${planId}/criteria/reset`, {
+      method: 'POST'
+    });
+    return data;
+  },
+};
+
 export { initializeApi };

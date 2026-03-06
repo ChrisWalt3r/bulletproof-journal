@@ -10,6 +10,7 @@ const journalRoutes = require('./routes/journal');
 const accountsRoutes = require('./routes/accounts');
 const imagesRoutes = require('./routes/images');
 const mt5Routes = require('./routes/mt5');
+const plansRoutes = require('./routes/plans');
 
 const app = express();
 
@@ -55,6 +56,7 @@ app.use('/api/mt5', mt5Routes);
 // app.use('/api/auth', authRoutes);
 app.use('/api/journal', verifyToken, journalRoutes);
 app.use('/api/accounts', verifyToken, accountsRoutes);
+app.use('/api/plans', verifyToken, plansRoutes);
 app.use('/api/images', imagesRoutes); // Images routes handle auth internally
 // app.use('/api/stats', verifyToken, statsRoutes);
 
