@@ -515,6 +515,44 @@ const CalendarScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
+        {/* Monthly Outcome Stats (only in OUTCOME mode) */}
+        {viewMode === 'OUTCOME' && (() => {
+          const allEntries = Object.values(journalEntries);
+          let wins = 0, losses = 0, breakevens = 0, opens = 0;
+          allEntries.forEach(day => {
+            wins += day.trades.WIN;
+            losses += day.trades.LOSS;
+            breakevens += day.trades.BREAKEVEN;
+            opens += day.trades.OPEN;
+          });
+          const closedTrades = wins + losses + breakevens;
+          const winRate = closedTrades > 0 ? Math.round((wins / closedTrades) * 100) : 0;
+
+          return closedTrades > 0 ? (
+            <View style={styles.planStatsCard}>
+              <Text style={styles.planStatsTitle}>Monthly Outcome Statistics</Text>
+              <View style={styles.planStatsRow}>
+                <View style={styles.planStatItem}>
+                  <Text style={[styles.planStatNumber, { color: '#50C878' }]}>{wins}</Text>
+                  <Text style={styles.planStatLabel}>Won</Text>
+                </View>
+                <View style={styles.planStatItem}>
+                  <Text style={[styles.planStatNumber, { color: '#4A90E2' }]}>{breakevens}</Text>
+                  <Text style={styles.planStatLabel}>Breakeven</Text>
+                </View>
+                <View style={styles.planStatItem}>
+                  <Text style={[styles.planStatNumber, { color: '#FF6B6B' }]}>{losses}</Text>
+                  <Text style={styles.planStatLabel}>Lost</Text>
+                </View>
+                <View style={[styles.planStatItem, styles.planStatHighlight]}>
+                  <Text style={[styles.planStatNumber, { color: winRate >= 50 ? '#50C878' : winRate >= 35 ? '#FFA500' : '#FF6B6B' }]}>{winRate}%</Text>
+                  <Text style={styles.planStatLabel}>Win Rate</Text>
+                </View>
+              </View>
+            </View>
+          ) : null;
+        })()}
+
         {/* Monthly Plan Adherence Stats (only in PLAN mode) */}
         {viewMode === 'PLAN' && (() => {
           const allEntries = Object.values(journalEntries);
