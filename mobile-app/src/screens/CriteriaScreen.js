@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import {
   getTradingPlans,
   createTradingPlan,
@@ -26,6 +27,7 @@ import {
   toggleCriterionChecked,
   deleteCriterion,
   resetPlanCriteria,
+  reorderCriteria,
 } from '../database/service';
 
 
@@ -101,13 +103,11 @@ const CriteriaScreen = () => {
           existingPlans = [defaultPlan];
         }
 
-        // Enforce max 3 plans in UI (DB can hold more but we won't create beyond 3)
-        const limitedPlans = existingPlans.slice(0, 3);
-        setPlans(limitedPlans);
-        setActivePlanId(limitedPlans[0]?.id ?? null);
+        setPlans(existingPlans);
+        setActivePlanId(existingPlans[0]?.id ?? null);
 
         const criteriaMap = {};
-        for (const plan of limitedPlans) {
+        for (const plan of existingPlans) {
           const criteria = await getCriteriaForPlan(plan.id);
           criteriaMap[plan.id] = criteria;
         }
@@ -122,11 +122,6 @@ const CriteriaScreen = () => {
   }, []);
 
   const handleAddPlan = async () => {
-    if (plans.length >= 3) {
-      Alert.alert('Limit reached', 'You can only have up to 3 trading plans.');
-      return;
-    }
-
     const trimmed = planNameInput.trim();
     if (!trimmed) {
       Alert.alert('Name required', 'Please enter a name for the trading plan.');
@@ -135,7 +130,7 @@ const CriteriaScreen = () => {
 
     try {
       const newPlan = await createTradingPlan(trimmed);
-      const updatedPlans = [...plans, newPlan].slice(0, 3);
+      const updatedPlans = [...plans, newPlan];
       setPlans(updatedPlans);
       setActivePlanId(newPlan.id);
       setPlanNameInput('');
@@ -467,17 +462,15 @@ const CriteriaScreen = () => {
             </TouchableOpacity>
           ))}
 
-          {plans.length < 3 && (
-            <TouchableOpacity
-              style={styles.addPlanButton}
-              onPress={() => {
-                setIsRenamingPlanId(null);
-                setPlanNameInput('');
-              }}
-            >
-              <Ionicons name="add" size={20} color="#667eea" />
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={styles.addPlanButton}
+            onPress={() => {
+              setIsRenamingPlanId(null);
+              setPlanNameInput('');
+            }}
+          >
+            <Ionicons name="add" size={20} color="#667eea" />
+          </TouchableOpacity>
         </ScrollView>
 
         {/* Plan Actions Bar */}
@@ -735,6 +728,81 @@ const CriteriaScreen = () => {
     </View>
   );
 
+  const handleDragEnd = useCallback(async ({ data }) => {
+    // Update local state immediately
+    setCriteriaByPlan(prev => ({
+      ...prev,
+      [activePlanId]: data,
+    }));
+
+    // Persist the new order
+    try {
+      await reorderCriteria(activePlanId, data);
+    } catch (error) {
+      console.error('Error persisting reorder:', error);
+    }
+  }, [activePlanId]);
+
+  const renderCriterionItem = useCallback(({ item, drag, isActive }) => {
+    const isChecked = item.checked;
+    return (
+      <ScaleDecorator>
+        <View
+          style={[
+            styles.criterionCard,
+            { marginHorizontal: 16 },
+            isActive && styles.criterionCardDragging,
+          ]}
+        >
+          <TouchableOpacity
+            onLongPress={drag}
+            delayLongPress={150}
+            style={styles.dragHandle}
+          >
+            <Ionicons name="menu" size={20} color={isActive ? '#667eea' : '#ccc'} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.checkbox, isChecked && styles.checkboxChecked]}
+            onPress={() => handleToggleCriterion(item.id, isChecked)}
+          >
+            {isChecked && <Ionicons name="checkmark" size={16} color="#fff" />}
+          </TouchableOpacity>
+
+          <View style={styles.criterionContent}>
+            {editingCriterionId === item.id ? (
+              <View style={styles.editContainer}>
+                <TextInput
+                  style={styles.editInput}
+                  value={editingCriterionText}
+                  onChangeText={setEditingCriterionText}
+                  autoFocus
+                  onBlur={handleSaveCriterionEdit}
+                  onSubmitEditing={handleSaveCriterionEdit}
+                />
+              </View>
+            ) : (
+              <TouchableOpacity onPress={() => startEditingCriterion(item)}>
+                <Text style={[styles.criterionText, isChecked && styles.criterionTextChecked]}>
+                  {item.text}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => handleDeleteCriterion(item.id)}
+          >
+            <Ionicons name="close-circle-outline" size={20} color="#ff6b6b" />
+          </TouchableOpacity>
+        </View>
+      </ScaleDecorator>
+    );
+  }, [editingCriterionId, editingCriterionText, activePlanId]);
+
+  const keyExtractor = useCallback((item) => item.id.toString(), []);
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#667eea" />
@@ -744,57 +812,18 @@ const CriteriaScreen = () => {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <ScrollView
+        <DraggableFlatList
+          data={activePlanCriteria}
+          onDragEnd={handleDragEnd}
+          keyExtractor={keyExtractor}
+          renderItem={renderCriterionItem}
+          ListHeaderComponent={renderHeader}
+          ListFooterComponent={renderFooter}
           contentContainerStyle={{ paddingBottom: 20 }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="none"
-        >
-          {renderHeader}
-
-          {activePlanCriteria.map((item) => {
-            const isChecked = item.checked;
-            return (
-              <View key={item.id.toString()} style={[styles.criterionCard, { marginHorizontal: 16 }]}>
-                <TouchableOpacity
-                  style={[styles.checkbox, isChecked && styles.checkboxChecked]}
-                  onPress={() => handleToggleCriterion(item.id, isChecked)}
-                >
-                  {isChecked && <Ionicons name="checkmark" size={16} color="#fff" />}
-                </TouchableOpacity>
-
-                <View style={styles.criterionContent}>
-                  {editingCriterionId === item.id ? (
-                    <View style={styles.editContainer}>
-                      <TextInput
-                        style={styles.editInput}
-                        value={editingCriterionText}
-                        onChangeText={setEditingCriterionText}
-                        autoFocus
-                        onBlur={handleSaveCriterionEdit}
-                        onSubmitEditing={handleSaveCriterionEdit}
-                      />
-                    </View>
-                  ) : (
-                    <TouchableOpacity onPress={() => startEditingCriterion(item)}>
-                      <Text style={[styles.criterionText, isChecked && styles.criterionTextChecked]}>
-                        {item.text}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                <TouchableOpacity
-                  style={styles.deleteButton}
-                  onPress={() => handleDeleteCriterion(item.id)}
-                >
-                  <Ionicons name="close-circle-outline" size={20} color="#ff6b6b" />
-                </TouchableOpacity>
-              </View>
-            );
-          })}
-
-          {renderFooter}
-        </ScrollView>
+          activationDistance={10}
+        />
       </KeyboardAvoidingView>
 
       {/* Tooltip Modal */}
@@ -1075,6 +1104,19 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderWidth: 1,
     borderColor: '#f0f0f5',
+  },
+  criterionCardDragging: {
+    backgroundColor: '#f0f4ff',
+    borderColor: '#667eea',
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  dragHandle: {
+    padding: 4,
+    marginRight: 8,
   },
   criterionCardChecked: {
     backgroundColor: '#fafbfc',
