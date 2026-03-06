@@ -16,7 +16,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { journalAPI } from '../services/api';
 import { useAccount } from '../context/AccountContext';
 import { useAccountChange } from '../context/useAccountChange';
-import { parseBackendTimestamp } from '../utils/dateUtils';
+import { parseBackendTimestamp, formatKampalaSmartDate } from '../utils/dateUtils';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -490,13 +490,7 @@ const HomeScreen = ({ navigation }) => {
                       )}
                     </View>
                     <Text style={styles.modernTradeDate}>
-                      {trade.date ? trade.date.toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        timeZone: 'Africa/Kampala'
-                      }) : 'No Date'}
+                      {trade.fullEntry.created_at ? formatKampalaSmartDate(trade.fullEntry.created_at) : 'No Date'}
                     </Text>
                   </View>
                 </View>

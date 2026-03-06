@@ -16,7 +16,7 @@ import { journalAPI } from '../services/api';
 import { useAccount } from '../context/AccountContext';
 import AccountHeader from '../components/AccountHeader';
 import { useAccountChange } from '../context/useAccountChange';
-import { formatKampalaTime } from '../utils/dateUtils';
+import { formatKampalaTime, getKampalaDateKey } from '../utils/dateUtils';
 
 const { width } = Dimensions.get('window');
 const CALENDAR_WIDTH = width - 40;
@@ -83,27 +83,25 @@ const CalendarScreen = ({ navigation }) => {
       response.entries.forEach(entry => {
         // Prefer the date embedded in the entry content (created by the app)
         // Fallback to parsing the created_at timestamp if content date is missing
-        let entryDateObj = null;
+        let entryYear = null, entryMonth = null, entryDay = null;
 
         const contentDate = extractContentDate(entry.content);
         if (contentDate) {
-          entryDateObj = contentDate;
+          entryYear = contentDate.getFullYear();
+          entryMonth = contentDate.getMonth() + 1;
+          entryDay = contentDate.getDate();
         } else if (entry.created_at) {
-          // Handle both "YYYY-MM-DD HH:mm:ss" and ISO "YYYY-MM-DDTHH:mm:ss.sssZ" formats
-          const createdAtStr = String(entry.created_at);
-          // Split on either 'T' or ' ' to get the date part
-          const datePart = createdAtStr.split(/[T ]/)[0]; // Get "YYYY-MM-DD" part
-          const [entryYear, entryMonth, entryDay] = datePart.split('-').map(Number);
-          if (!isNaN(entryYear) && !isNaN(entryMonth) && !isNaN(entryDay)) {
-            entryDateObj = new Date(entryYear, entryMonth - 1, entryDay);
+          // Use timezone-aware date key to get the correct Kampala date
+          const dateKey = getKampalaDateKey(entry.created_at);
+          if (dateKey) {
+            const [y, m, d] = dateKey.split('-').map(Number);
+            entryYear = y;
+            entryMonth = m;
+            entryDay = d;
           }
         }
 
-        if (!entryDateObj) return;
-
-        const entryYear = entryDateObj.getFullYear();
-        const entryMonth = entryDateObj.getMonth() + 1;
-        const entryDay = entryDateObj.getDate();
+        if (!entryYear || !entryMonth || !entryDay) return;
 
         console.log('Calendar: Entry date:', entry.created_at, '-> Parsed:', entryYear, entryMonth, entryDay);
 

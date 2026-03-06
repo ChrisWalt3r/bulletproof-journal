@@ -13,6 +13,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { journalAPI } from '../services/api';
+import { formatKampalaSmartDate } from '../utils/dateUtils';
 
 const AccountJournalScreen = ({ route, navigation }) => {
   const { account } = route.params;
@@ -204,19 +205,8 @@ const AccountJournalScreen = ({ route, navigation }) => {
     const currencyPairs = item.symbol || extractCurrencyPairs(item.content);
     const tradeResult = extractTradeResult(item);
     const cardColor = getCardColor(tradeResult);
-    const contentDateObj = extractContentDate(item.content);
-    const displayDateLabel = contentDateObj
-      ? (() => {
-        const now = new Date();
-        const isToday = contentDateObj.toDateString() === now.toDateString();
-        const yesterday = new Date(now);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const isYesterday = contentDateObj.toDateString() === yesterday.toDateString();
-        if (isToday) return 'Today';
-        if (isYesterday) return 'Yesterday';
-        return contentDateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-      })()
-      : formatDate(item.created_at);
+    // Use Kampala-timezone-aware smart date for all entries
+    const displayDateLabel = formatKampalaSmartDate(item.created_at);
     return (
       <TouchableOpacity
         style={[styles.entryCard, { borderLeftColor: cardColor, borderLeftWidth: 4 }]}

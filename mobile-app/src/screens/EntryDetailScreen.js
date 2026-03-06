@@ -22,7 +22,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { journalAPI, imageAPI } from '../services/api';
 import { useAccount } from '../context/AccountContext';
-import { formatKampalaDate } from '../utils/dateUtils';
+import { formatKampalaDate, formatKampalaTime } from '../utils/dateUtils';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -422,6 +422,7 @@ const EntryDetailScreen = ({ route, navigation }) => {
   const displayDate = contentDateObj
     ? contentDateObj.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     : formatDate(entry.created_at);
+  const displayTime = entry.created_at ? formatKampalaTime(entry.created_at) : '';
 
   return (
     <View style={styles.container}>
@@ -475,7 +476,7 @@ const EntryDetailScreen = ({ route, navigation }) => {
                 <Text style={styles.resultBadgeText}>{tradeResult}</Text>
               </View>
             </View>
-            <Text style={styles.dateText}>{displayDate}</Text>
+            <Text style={styles.dateText}>{displayDate}{displayTime ? ` • ${displayTime}` : ''}</Text>
             {displayDirection && (
               <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
                 <Ionicons
