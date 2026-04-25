@@ -199,6 +199,15 @@ const SettingsScreen = ({ navigation, route }) => {
             <Text style={styles.quickActionText}>Equity Curve</Text>
             <Ionicons name="chevron-forward" size={20} color="#666" />
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.quickActionCard, { marginTop: 15 }]}
+            onPress={() => navigation.navigate('ExecutionReview')}
+          >
+            <Ionicons name="aperture" size={24} color="#E65100" />
+            <Text style={styles.quickActionText}>Execution Review</Text>
+            <Ionicons name="chevron-forward" size={20} color="#666" />
+          </TouchableOpacity>
         </View>
 
         {/* Trading Accounts */}

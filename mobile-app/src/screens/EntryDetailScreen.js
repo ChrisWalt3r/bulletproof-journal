@@ -50,6 +50,7 @@ const EntryDetailScreen = ({ route, navigation }) => {
   const [isFollowingPlan, setIsFollowingPlan] = useState(false);
   const [emotionalState, setEmotionalState] = useState('');
   const [galleryImages, setGalleryImages] = useState([]);
+  const [executionTfImage, setExecutionTfImage] = useState(null);
 
   const pairsList = ['EURUSD', 'GBPUSD', 'NZDUSD', 'AUDUSD', 'XAUUSD', 'USDJPY', 'USDCAD', 'USDCHF'];
   const tradeDirections = ['BUY', 'SELL'];
@@ -62,6 +63,7 @@ const EntryDetailScreen = ({ route, navigation }) => {
       setIsFollowingPlan(!!entry.following_plan);
       setEmotionalState(entry.emotional_state || '');
       setSetupImage(entry.before_image_url || entry.image_url || null);
+      setExecutionTfImage(entry.execution_tf_image_url || null);
 
       // Load gallery images
       if (entry.gallery_images) {
@@ -209,6 +211,47 @@ const EntryDetailScreen = ({ route, navigation }) => {
     Alert.alert('Image Options', 'Choose how to manage your setup image', opts);
   };
 
+  const pickExecutionTfImage = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) { Alert.alert('Permission Denied', 'Grant gallery permissions.'); return; }
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: false, quality: 0.85 });
+      if (!result.canceled && result.assets?.length > 0) {
+        setExecutionTfImage(await copyImageToPermanentStorage(result.assets[0].uri));
+      }
+    } catch (e) { Alert.alert('Error', e.message); }
+  };
+
+  const takeExecutionTfPhoto = async () => {
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) { Alert.alert('Permission Denied', 'Grant camera permissions.'); return; }
+      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [4, 3], quality: 0.85 });
+      if (!result.canceled && result.assets?.length > 0) {
+        setExecutionTfImage(await copyImageToPermanentStorage(result.assets[0].uri));
+      }
+    } catch (e) { Alert.alert('Error', e.message); }
+  };
+
+  const showExecutionTfImagePicker = () => {
+    const options = [
+      { text: 'Camera', onPress: takeExecutionTfPhoto },
+      { text: 'Gallery', onPress: pickExecutionTfImage },
+    ];
+
+    if (executionTfImage) {
+      options.push({
+        text: 'Remove Image',
+        style: 'destructive',
+        onPress: () => setExecutionTfImage(null),
+      });
+    }
+
+    options.push({ text: 'Cancel', style: 'cancel' });
+
+    Alert.alert('Execution TF Image', 'Choose source', options);
+  };
+
   // ---- Gallery image handling ----
   const MAX_GALLERY = 5;
 
@@ -287,6 +330,10 @@ const EntryDetailScreen = ({ route, navigation }) => {
     try {
       let imageUrl = entry.image_url;
       let imageFilename = entry.image_filename;
+      let executionTfImageUrl = entry.execution_tf_image_url || null;
+      let executionTfImageFilename = entry.execution_tf_image_filename || null;
+      const clearImage = setupImage === null && !!entry.image_url;
+      const clearExecutionTfImage = executionTfImage === null && !!entry.execution_tf_image_url;
 
       if (setupImage && setupImage.startsWith('file://')) {
         setIsUploading(true);
@@ -298,9 +345,40 @@ const EntryDetailScreen = ({ route, navigation }) => {
           imageUrl = null; imageFilename = null;
         } finally { setIsUploading(false); }
       } else if (!setupImage) {
-        imageUrl = null; imageFilename = null;
+        if (clearImage) {
+          imageUrl = '';
+          imageFilename = '';
+        } else {
+          imageUrl = null;
+          imageFilename = null;
+        }
       } else if (setupImage?.startsWith('http')) {
         imageUrl = setupImage;
+      }
+
+      if (executionTfImage && executionTfImage.startsWith('file://')) {
+        setIsUploading(true);
+        try {
+          const up = await imageAPI.uploadImage(executionTfImage);
+          if (up.imageUrl && up.filename) {
+            executionTfImageUrl = up.imageUrl;
+            executionTfImageFilename = up.filename;
+          }
+        } catch (e) {
+          console.error('Execution TF upload failed:', e);
+          executionTfImageUrl = null;
+          executionTfImageFilename = null;
+        } finally { setIsUploading(false); }
+      } else if (executionTfImage?.startsWith('http')) {
+        executionTfImageUrl = executionTfImage;
+      } else if (!executionTfImage) {
+        if (clearExecutionTfImage) {
+          executionTfImageUrl = '';
+          executionTfImageFilename = '';
+        } else {
+          executionTfImageUrl = null;
+          executionTfImageFilename = null;
+        }
       }
 
       // Upload gallery images that are local files
@@ -322,14 +400,23 @@ const EntryDetailScreen = ({ route, navigation }) => {
       const response = await journalAPI.updateEntry(entry.id, {
         content: entry.mt5_ticket ? entry.content : generateJournalContent(),
         imageUrl, imageFilename,
+        executionTfImageUrl, executionTfImageFilename,
         accountId: currentAccount?.id || entry.account_id,
         followingPlan: isFollowingPlan,
         emotionalState,
         notes,
         galleryImages: uploadedGallery,
+        clearImage,
+        clearExecutionTfImage,
       });
 
       if (response.entry && response.message) {
+        if (clearImage && (entry.image_filename || entry.image_url)) {
+          await imageAPI.deleteImage(entry.image_filename || entry.image_url);
+        }
+        if (clearExecutionTfImage && (entry.execution_tf_image_filename || entry.execution_tf_image_url)) {
+          await imageAPI.deleteImage(entry.execution_tf_image_filename || entry.execution_tf_image_url);
+        }
         setEntry(response.entry);
         setIsEditing(false);
         Alert.alert('Success!', 'Journal entry updated.');
@@ -768,6 +855,50 @@ const EntryDetailScreen = ({ route, navigation }) => {
               </Text>
             )}
           </View>
+
+            {/* Execution TF Image */}
+            <View style={styles.detailsCard}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <Text style={[styles.cardTitle, { marginBottom: 0 }]}>Execution TF Image</Text>
+                {isEditing && (
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#E8F1FF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }}
+                    onPress={showExecutionTfImagePicker}
+                  >
+                    <Ionicons name={executionTfImage ? 'refresh' : 'add'} size={18} color="#4A90E2" />
+                    <Text style={{ color: '#4A90E2', fontWeight: '600', marginLeft: 4, fontSize: 13 }}>
+                      {executionTfImage ? 'Change' : 'Upload'} (1/1)
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {executionTfImage ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    setSelectedImageUrl(executionTfImage);
+                    setImageModalVisible(true);
+                  }}
+                  activeOpacity={0.85}
+                  style={{ borderRadius: 12, overflow: 'hidden' }}
+                >
+                  <Image source={{ uri: executionTfImage }} style={{ width: '100%', height: 220, borderRadius: 12 }} resizeMode="cover" />
+                  <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.35)', paddingVertical: 7, alignItems: 'center' }}>
+                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Tap to enlarge</Text>
+                  </View>
+                </TouchableOpacity>
+              ) : isEditing ? (
+                <TouchableOpacity style={styles.uploadCard} onPress={showExecutionTfImagePicker}>
+                  <View style={styles.uploadIcon}>
+                    <Ionicons name="aperture" size={32} color="#4A90E2" />
+                  </View>
+                  <Text style={styles.uploadTitle}>Add Execution TF Image</Text>
+                  <Text style={styles.uploadSubtitle}>Upload one image for the execution timeframe</Text>
+                </TouchableOpacity>
+              ) : (
+                <Text style={[styles.emotionalStateText, { fontStyle: 'normal', color: '#999' }]}>No execution timeframe image</Text>
+              )}
+            </View>
 
           {/* Gallery Images */}
           <View style={styles.detailsCard}>

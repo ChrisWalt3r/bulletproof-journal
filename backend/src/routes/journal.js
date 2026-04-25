@@ -1,7 +1,26 @@
 const express = require('express');
 const { runQuery, getRow, getAllRows } = require('../database/connection');
+const storageService = require('../services/storage');
 
 const router = express.Router();
+
+const normalizeEntryImages = (entry) => {
+  if (!entry) {
+    return entry;
+  }
+
+  return {
+    ...entry,
+    image_url:
+      entry.image_url ||
+      (entry.image_filename ? storageService.getPublicUrl(entry.image_filename) : null),
+    execution_tf_image_url:
+      entry.execution_tf_image_url ||
+      (entry.execution_tf_image_filename
+        ? storageService.getPublicUrl(entry.execution_tf_image_filename)
+        : null),
+  };
+};
 
 // Get all journal entries (user-scoped via accounts)
 router.get('/', async (req, res) => {
@@ -11,7 +30,7 @@ router.get('/', async (req, res) => {
     const offset = (page - 1) * limit;
 
     let query = `
-      SELECT je.id, je.title, je.content, je.mood_rating, je.tags, je.is_private, je.image_url, je.image_filename, je.account_id, je.reason_mindset, je.created_at, je.updated_at,
+      SELECT je.id, je.title, je.content, je.mood_rating, je.tags, je.is_private, je.image_url, je.image_filename, je.execution_tf_image_url, je.execution_tf_image_filename, je.account_id, je.reason_mindset, je.created_at, je.updated_at,
              je.mt5_ticket, je.before_image_url, je.after_image_url, je.pnl, je.commission, je.swap, je.entry_price, je.exit_price, je.balance, je.stop_loss, je.take_profit,
              je.is_plan_compliant, je.plan_notes, je.symbol, je.direction, je.volume, je.following_plan, je.emotional_state, je.notes, je.asset_type, je.gallery_images
       FROM journal_entries je
@@ -84,7 +103,7 @@ router.get('/', async (req, res) => {
 
     res.json({
       entries: entries.map(entry => ({
-        ...entry,
+        ...normalizeEntryImages(entry),
         tags: entry.tags || [], // Postgres JSONB returns object/array directly
         is_private: Boolean(entry.is_private)
       })),
@@ -125,8 +144,10 @@ router.get('/:id', async (req, res) => {
       });
     }
 
+    const normalizedEntry = normalizeEntryImages(entry);
+
     res.json({
-      ...entry,
+      ...normalizedEntry,
       tags: entry.tags || [],
       is_private: Boolean(entry.is_private)
     });
@@ -148,7 +169,8 @@ router.post('/', async (req, res) => {
       title, content, moodRating, tags = [], isPrivate = true,
       imageUrl, imageFilename, accountId, reasonMindset,
       createdAt, isPlanCompliant, planNotes,
-      followingPlan, emotionalState, notes
+      followingPlan, emotionalState, notes,
+      executionTfImageUrl, executionTfImageFilename
     } = req.body;
 
     if (!title || !content) {
@@ -170,15 +192,23 @@ router.post('/', async (req, res) => {
     // Timestamp logic (Postgres handles timezone, but we can store explicit UTC if provided)
     const timestamp = createdAt || new Date().toISOString(); // Simplified for now, Postgres accepts ISO string
 
+    const normalizedImageUrl =
+      imageUrl || (imageFilename ? storageService.getPublicUrl(imageFilename) : null);
+    const normalizedExecutionTfImageUrl =
+      executionTfImageUrl ||
+      (executionTfImageFilename
+        ? storageService.getPublicUrl(executionTfImageFilename)
+        : null);
+
     const result = await runQuery(
       `INSERT INTO journal_entries (
         title, content, mood_rating, tags, is_private, 
-        image_url, image_filename, account_id, reason_mindset, 
+        image_url, image_filename, execution_tf_image_url, execution_tf_image_filename, account_id, reason_mindset, 
         is_plan_compliant, plan_notes,
         following_plan, emotional_state, notes,
         created_at, updated_at
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $15)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $17)
        RETURNING *`,
       [
         title,
@@ -186,8 +216,10 @@ router.post('/', async (req, res) => {
         moodRating || null,
         JSON.stringify(tags), // JSONB accepts string or object, but stringify is safer
         isPrivate,
-        imageUrl || null,
+        normalizedImageUrl,
         imageFilename || null,
+        normalizedExecutionTfImageUrl,
+        executionTfImageFilename || null,
         resolvedAccountId,
         reasonMindset || null,
         isPlanCompliant || false,
@@ -199,7 +231,7 @@ router.post('/', async (req, res) => {
       ]
     );
 
-    const newEntry = result.rows[0];
+    const newEntry = normalizeEntryImages(result.rows[0]);
 
     res.status(201).json({
       message: 'Journal entry created successfully',
@@ -228,7 +260,10 @@ router.put('/:id', async (req, res) => {
       title, content, moodRating, tags, isPrivate,
       imageUrl, imageFilename, accountId, reasonMindset,
       isPlanCompliant, planNotes, followingPlan, emotionalState, notes,
-      galleryImages
+      executionTfImageUrl, executionTfImageFilename,
+      galleryImages,
+      clearImage,
+      clearExecutionTfImage
     } = req.body;
 
     // Verify entry belongs to this user's accounts
@@ -243,6 +278,18 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Entry not found' });
     }
 
+    const normalizedImageUrl =
+      clearImage === true
+        ? null
+        : imageUrl || (imageFilename ? storageService.getPublicUrl(imageFilename) : null);
+    const normalizedExecutionTfImageUrl =
+      clearExecutionTfImage === true
+        ? null
+        : executionTfImageUrl ||
+          (executionTfImageFilename
+            ? storageService.getPublicUrl(executionTfImageFilename)
+            : null);
+
     const result = await runQuery(
       `UPDATE journal_entries 
        SET title = COALESCE($1, title),
@@ -250,18 +297,20 @@ router.put('/:id', async (req, res) => {
            mood_rating = COALESCE($3, mood_rating),
            tags = COALESCE($4, tags),
            is_private = COALESCE($5, is_private),
-           image_url = COALESCE($6, image_url),
-           image_filename = COALESCE($7, image_filename),
-           account_id = COALESCE($8, account_id),
-           reason_mindset = COALESCE($9, reason_mindset),
-           is_plan_compliant = COALESCE($10, is_plan_compliant),
-           plan_notes = COALESCE($11, plan_notes),
-           following_plan = COALESCE($12, following_plan),
-           emotional_state = COALESCE($13, emotional_state),
-           notes = COALESCE($14, notes),
-           gallery_images = COALESCE($15, gallery_images),
+           image_url = CASE WHEN $18 THEN NULL ELSE COALESCE($6, image_url) END,
+           image_filename = CASE WHEN $18 THEN NULL ELSE COALESCE($7, image_filename) END,
+           execution_tf_image_url = CASE WHEN $19 THEN NULL ELSE COALESCE($8, execution_tf_image_url) END,
+           execution_tf_image_filename = CASE WHEN $19 THEN NULL ELSE COALESCE($9, execution_tf_image_filename) END,
+           account_id = COALESCE($10, account_id),
+           reason_mindset = COALESCE($11, reason_mindset),
+           is_plan_compliant = COALESCE($12, is_plan_compliant),
+           plan_notes = COALESCE($13, plan_notes),
+           following_plan = COALESCE($14, following_plan),
+           emotional_state = COALESCE($15, emotional_state),
+           notes = COALESCE($16, notes),
+           gallery_images = COALESCE($17, gallery_images),
            updated_at = NOW()
-       WHERE id = $16
+         WHERE id = $20
        RETURNING *`,
       [
         title || null,
@@ -269,8 +318,10 @@ router.put('/:id', async (req, res) => {
         moodRating || null,
         tags ? JSON.stringify(tags) : null,
         isPrivate,
-        imageUrl,
+        normalizedImageUrl,
         imageFilename,
+        normalizedExecutionTfImageUrl,
+        executionTfImageFilename,
         accountId || null,
         reasonMindset,
         isPlanCompliant,
@@ -279,11 +330,13 @@ router.put('/:id', async (req, res) => {
         emotionalState || null,
         notes || null,
         galleryImages ? JSON.stringify(galleryImages) : null,
+        clearImage === true,
+        clearExecutionTfImage === true,
         id
       ]
     );
 
-    const updatedEntry = result.rows[0];
+    const updatedEntry = normalizeEntryImages(result.rows[0]);
 
     res.json({
       message: 'Journal entry updated successfully',

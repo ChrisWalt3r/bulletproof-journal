@@ -13,6 +13,10 @@ const mt5Routes = require('./routes/mt5');
 const plansRoutes = require('./routes/plans');
 
 const app = express();
+const configuredOrigins = (process.env.CORS_ORIGIN || process.env.FRONTEND_URL || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 // Production middleware
 if (process.env.NODE_ENV === 'production') {
@@ -24,7 +28,22 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // CORS — allow mobile app + any origin for now
-app.use(cors());
+app.use(
+  cors(
+    configuredOrigins.length > 0
+      ? {
+          origin(origin, callback) {
+            if (!origin || configuredOrigins.includes(origin)) {
+              callback(null, true);
+              return;
+            }
+
+            callback(new Error(`CORS blocked for origin: ${origin}`));
+          },
+        }
+      : undefined
+  )
+);
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 

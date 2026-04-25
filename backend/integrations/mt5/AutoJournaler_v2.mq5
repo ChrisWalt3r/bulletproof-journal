@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Bulletproof Journal"
 #property link      "https://yourjournalapp.com"
-#property version   "3.10"
+#property version   "3.11"
 #property description "Universal Auto-Journaler: captures ALL trades across all"
 #property description "symbols (forex, indices, commodities, etc.) from a single"
 #property description "chart. Attach to any ONE chart — it monitors the entire account."
@@ -14,7 +14,7 @@
 
 // --- INPUTS ---
 input string   InpApiUrl      = "https://bulletproof-journal-1.onrender.com/api/mt5/webhook"; // API Webhook URL
-input string   InpApiSecret   = "BulletproofTrades2026!";                 // Webhook Secret
+input string   InpApiSecret   = "";                                       // Webhook Secret (must match backend MT5_WEBHOOK_SECRET)
 input int      InpAccountId   = 1;                                // Journal Account ID
 input int      InpWidth       = 1366;                             // Screenshot Width
 input int      InpHeight      = 768;                              // Screenshot Height
@@ -29,7 +29,7 @@ const string msg_base64_table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstu
 int OnInit()
 {
    Print("============================================");
-   Print("  AutoJournaler v3.10 (Universal) Started");
+   Print("  AutoJournaler v3.11 (Universal) Started");
    Print("  Webhook: ", InpApiUrl);
    Print("  Account ID: ", InpAccountId);
    Print("  Sync Lookback: ", InpSyncDays, " days");
@@ -37,6 +37,15 @@ int OnInit()
    Print("  Attach to ONE chart only — it captures");
    Print("  forex, indices, commodities, crypto, etc.");
    Print("============================================");
+   
+   if(InpApiSecret == "")
+   {
+      Print("WARNING: InpApiSecret is blank. Set it to the same value as backend MT5_WEBHOOK_SECRET before trading.");
+   }
+   if(StringFind(InpApiUrl, "YOUR-") >= 0 || StringFind(InpApiUrl, "change-me") >= 0)
+   {
+      Print("WARNING: Update InpApiUrl to your live backend webhook URL before trading.");
+   }
    
    // Catch-up sync: send any deals that were missed while MT5 desktop was off
    if(InpSyncDays > 0)

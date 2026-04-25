@@ -19,6 +19,7 @@ import CreateEntryScreen from './src/screens/CreateEntryScreen';
 import EntryDetailScreen from './src/screens/EntryDetailScreen';
 import CriteriaScreen from './src/screens/CriteriaScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import ExecutionReviewScreen from './src/screens/ExecutionReviewScreen';
 import CalendarScreen from './src/screens/CalendarScreen';
 import AccountJournalScreen from './src/screens/AccountJournalScreen';
 import AccountGrowthScreen from './src/screens/AccountGrowthScreen';
@@ -50,6 +51,7 @@ function SettingsStack() {
       <Stack.Screen name="Calendar" component={CalendarScreen} />
       <Stack.Screen name="AccountJournal" component={AccountJournalScreen} />
       <Stack.Screen name="AccountGrowth" component={AccountGrowthScreen} />
+      <Stack.Screen name="ExecutionReview" component={ExecutionReviewScreen} />
       <Stack.Screen name="EntryDetail" component={EntryDetailScreen} />
       <Stack.Screen name="CreateEntry" component={CreateEntryScreen} />
     </Stack.Navigator>

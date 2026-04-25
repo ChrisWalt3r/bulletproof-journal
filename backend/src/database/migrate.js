@@ -99,6 +99,8 @@ const addMT5Support = async (db) => {
       { name: 'mt5_ticket', type: 'INTEGER' },
       { name: 'before_image_url', type: 'TEXT' },
       { name: 'after_image_url', type: 'TEXT' },
+      { name: 'execution_tf_image_url', type: 'TEXT' },
+      { name: 'execution_tf_image_filename', type: 'TEXT' },
       { name: 'pnl', type: 'REAL' },
       { name: 'entry_price', type: 'REAL' },
       { name: 'exit_price', type: 'REAL' },
@@ -187,6 +189,8 @@ const addImageColumns = async (db) => {
           is_private BOOLEAN DEFAULT 1,
           image_url TEXT,
           image_filename TEXT,
+          execution_tf_image_url TEXT,
+          execution_tf_image_filename TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
@@ -194,8 +198,8 @@ const addImageColumns = async (db) => {
 
       // Copy data from old table to new table (excluding user_id)
       await runQuery(db, `
-        INSERT INTO journal_entries_new (id, title, content, mood_rating, tags, is_private, image_url, image_filename, created_at, updated_at)
-        SELECT id, title, content, mood_rating, tags, is_private, image_url, image_filename, created_at, updated_at
+        INSERT INTO journal_entries_new (id, title, content, mood_rating, tags, is_private, image_url, image_filename, execution_tf_image_url, execution_tf_image_filename, created_at, updated_at)
+        SELECT id, title, content, mood_rating, tags, is_private, image_url, image_filename, execution_tf_image_url, execution_tf_image_filename, created_at, updated_at
         FROM journal_entries
       `);
 

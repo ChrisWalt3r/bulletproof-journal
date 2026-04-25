@@ -5,7 +5,7 @@ require('dotenv').config();
 
 // Configuration
 const API_URL = 'http://localhost:3000/api/mt5/webhook';
-const SECRET = process.env.MT5_WEBHOOK_SECRET || 'BulletproofTrades2026!';
+const SECRET = process.env.MT5_WEBHOOK_SECRET;
 const TICKET_ID = Math.floor(Math.random() * 1000000);
 
 // minimal 1x1 pixel transparent gif base64
@@ -48,6 +48,11 @@ function postRequest(data) {
 }
 
 (async () => {
+    if (!SECRET) {
+        console.error('Set MT5_WEBHOOK_SECRET in backend/.env before running this simulation.');
+        process.exit(1);
+    }
+
     // Wait for server to start
     await new Promise(r => setTimeout(r, 2000));
 
