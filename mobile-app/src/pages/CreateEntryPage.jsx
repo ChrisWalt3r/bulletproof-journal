@@ -12,6 +12,7 @@ import {
 } from 'react-icons/io5';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import Modal from '../components/Modal.jsx';
 import { useAccount } from '../context/AccountContext.jsx';
 import { imageAPI, journalAPI } from '../services/api.js';
 import {
@@ -39,6 +40,7 @@ export default function CreateEntryPage() {
   const [setupPreview, setSetupPreview] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [expandedImage, setExpandedImage] = useState('');
 
   const galleryInputRef = useRef(null);
   const cameraInputRef = useRef(null);
@@ -186,7 +188,13 @@ export default function CreateEntryPage() {
 
           {setupPreview ? (
             <div className="image-preview-card">
-              <img src={setupPreview} alt="Selected setup" />
+              <button
+                type="button"
+                className="image-preview-trigger"
+                onClick={() => setExpandedImage(setupPreview)}
+              >
+                <img src={setupPreview} alt="Selected setup" />
+              </button>
               <div className="button-row">
                 <button
                   type="button"
@@ -415,6 +423,17 @@ export default function CreateEntryPage() {
           {isUploading ? 'Uploading Image...' : isLoading ? 'Saving Entry...' : 'Save Trading Journal'}
         </button>
       </section>
+
+      <Modal
+        open={Boolean(expandedImage)}
+        title="Setup image"
+        onClose={() => setExpandedImage('')}
+        fullscreen
+      >
+        <div className="image-lightbox">
+          {expandedImage ? <img src={expandedImage} alt="Expanded setup preview" /> : null}
+        </div>
+      </Modal>
     </div>
   );
 }

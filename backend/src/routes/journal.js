@@ -31,7 +31,7 @@ router.get('/', async (req, res) => {
 
     let query = `
       SELECT je.id, je.title, je.content, je.mood_rating, je.tags, je.is_private, je.image_url, je.image_filename, je.execution_tf_image_url, je.execution_tf_image_filename, je.account_id, je.reason_mindset, je.created_at, je.updated_at,
-             je.mt5_ticket, je.before_image_url, je.after_image_url, je.pnl, je.commission, je.swap, je.entry_price, je.exit_price, je.balance, je.stop_loss, je.take_profit,
+             je.mt5_ticket, je.before_image_url, je.after_image_url, je.pnl, je.pnl_percentage, je.commission, je.swap, je.entry_price, je.exit_price, je.balance, je.stop_loss, je.take_profit,
              je.is_plan_compliant, je.plan_notes, je.symbol, je.direction, je.volume, je.following_plan, je.emotional_state, je.notes, je.asset_type, je.gallery_images
       FROM journal_entries je
       JOIN accounts a ON je.account_id = a.id
@@ -170,7 +170,7 @@ router.post('/', async (req, res) => {
       imageUrl, imageFilename, accountId, reasonMindset,
       createdAt, isPlanCompliant, planNotes,
       followingPlan, emotionalState, notes,
-      executionTfImageUrl, executionTfImageFilename
+      executionTfImageUrl, executionTfImageFilename, pnlPercentage
     } = req.body;
 
     if (!title || !content) {
@@ -205,10 +205,10 @@ router.post('/', async (req, res) => {
         title, content, mood_rating, tags, is_private, 
         image_url, image_filename, execution_tf_image_url, execution_tf_image_filename, account_id, reason_mindset, 
         is_plan_compliant, plan_notes,
-        following_plan, emotional_state, notes,
+        following_plan, emotional_state, notes, pnl_percentage,
         created_at, updated_at
        )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $17)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $18)
        RETURNING *`,
       [
         title,
@@ -227,6 +227,7 @@ router.post('/', async (req, res) => {
         followingPlan || false,
         emotionalState || null,
         notes || null,
+        pnlPercentage != null ? Number(pnlPercentage) : null,
         timestamp
       ]
     );
@@ -261,6 +262,7 @@ router.put('/:id', async (req, res) => {
       imageUrl, imageFilename, accountId, reasonMindset,
       isPlanCompliant, planNotes, followingPlan, emotionalState, notes,
       executionTfImageUrl, executionTfImageFilename,
+      pnlPercentage,
       galleryImages,
       clearImage,
       clearExecutionTfImage
@@ -297,10 +299,10 @@ router.put('/:id', async (req, res) => {
            mood_rating = COALESCE($3, mood_rating),
            tags = COALESCE($4, tags),
            is_private = COALESCE($5, is_private),
-           image_url = CASE WHEN $18 THEN NULL ELSE COALESCE($6, image_url) END,
-           image_filename = CASE WHEN $18 THEN NULL ELSE COALESCE($7, image_filename) END,
-           execution_tf_image_url = CASE WHEN $19 THEN NULL ELSE COALESCE($8, execution_tf_image_url) END,
-           execution_tf_image_filename = CASE WHEN $19 THEN NULL ELSE COALESCE($9, execution_tf_image_filename) END,
+           image_url = CASE WHEN $19 THEN NULL ELSE COALESCE($6, image_url) END,
+           image_filename = CASE WHEN $19 THEN NULL ELSE COALESCE($7, image_filename) END,
+           execution_tf_image_url = CASE WHEN $20 THEN NULL ELSE COALESCE($8, execution_tf_image_url) END,
+           execution_tf_image_filename = CASE WHEN $20 THEN NULL ELSE COALESCE($9, execution_tf_image_filename) END,
            account_id = COALESCE($10, account_id),
            reason_mindset = COALESCE($11, reason_mindset),
            is_plan_compliant = COALESCE($12, is_plan_compliant),
@@ -309,8 +311,9 @@ router.put('/:id', async (req, res) => {
            emotional_state = COALESCE($15, emotional_state),
            notes = COALESCE($16, notes),
            gallery_images = COALESCE($17, gallery_images),
+           pnl_percentage = COALESCE($18, pnl_percentage),
            updated_at = NOW()
-         WHERE id = $20
+         WHERE id = $21
        RETURNING *`,
       [
         title || null,
@@ -330,6 +333,7 @@ router.put('/:id', async (req, res) => {
         emotionalState || null,
         notes || null,
         galleryImages ? JSON.stringify(galleryImages) : null,
+        pnlPercentage != null ? Number(pnlPercentage) : null,
         clearImage === true,
         clearExecutionTfImage === true,
         id

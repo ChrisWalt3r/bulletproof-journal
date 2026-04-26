@@ -17,11 +17,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAccount } from '../context/AccountContext';
 import { journalAPI } from '../services/api';
 import { useFocusEffect } from '@react-navigation/native';
-import { formatKampalaDate, formatKampalaTime, formatKampalaDateTime } from '../utils/dateUtils';
+import { APP_TIME_ZONE, formatKampalaDate, formatKampalaTime, formatKampalaDateTime } from '../utils/dateUtils';
 
 const { width: screenWidth } = Dimensions.get('window');
 
-const KAMPALA_TZ = 'Africa/Kampala';
+const KAMPALA_TZ = APP_TIME_ZONE;
 
 const TIME_FILTERS = [
     { key: 'WEEK', label: '1W' },

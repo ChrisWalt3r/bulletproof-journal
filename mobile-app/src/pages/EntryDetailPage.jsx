@@ -19,8 +19,10 @@ import { imageAPI, journalAPI } from '../services/api.js';
 import { formatKampalaDate, formatKampalaTime } from '../utils/dateUtils.js';
 import {
   buildManualEntryContent,
+  formatPnlPercentage,
   getEntryOutcome,
   getEntryPair,
+  getPnlPercentageValue,
   getPlanStatusLabel,
   getResultColor,
   getRiskRewardValue,
@@ -152,6 +154,10 @@ export default function EntryDetailPage() {
             : 'N/A',
       },
       {
+        label: 'P&L %',
+        value: formatPnlPercentage(entry),
+      },
+      {
         label: 'Plan Status',
         value: getPlanStatusLabel(
           entry?.following_plan === true || entry?.following_plan === 'true'
@@ -276,6 +282,7 @@ export default function EntryDetailPage() {
         followingPlan: isFollowingPlan,
         emotionalState,
         notes,
+        pnlPercentage: getPnlPercentageValue(entry),
         galleryImages: uploadedGallery,
         clearImage,
         clearExecutionTfImage,
@@ -336,6 +343,26 @@ export default function EntryDetailPage() {
   const primaryImage = setupAsset?.url || '';
   const executionImage = executionAsset?.url || '';
 
+  const openImagePreview = (src, title, imageKey) => {
+    if (!src) {
+      return;
+    }
+
+    navigate(
+      `/image-viewer/${entry.id}/${imageKey}?src=${encodeURIComponent(
+        src
+      )}&title=${encodeURIComponent(title)}`,
+      {
+        state: {
+          from: `/journal/${entry.id}`,
+          images: [{ id: entry.id, src, title }],
+          initialIndex: 0,
+          canOpenEntry: false,
+        },
+      }
+    );
+  };
+
   return (
     <div className="page">
       <PageHeader
@@ -393,7 +420,13 @@ export default function EntryDetailPage() {
 
           {primaryImage ? (
             <div className="image-preview-card">
-              <img src={primaryImage} alt="Setup analysis" />
+              <button
+                type="button"
+                className="image-preview-trigger"
+                onClick={() => openImagePreview(primaryImage, 'Primary image', 'setup')}
+              >
+                <img src={primaryImage} alt="Setup analysis" />
+              </button>
             </div>
           ) : (
             <EmptyState
@@ -606,7 +639,15 @@ export default function EntryDetailPage() {
 
           {executionImage ? (
             <div className="image-preview-card">
-              <img src={executionImage} alt="Execution timeframe" />
+              <button
+                type="button"
+                className="image-preview-trigger"
+                onClick={() =>
+                  openImagePreview(executionImage, 'Execution timeframe image', 'execution')
+                }
+              >
+                <img src={executionImage} alt="Execution timeframe" />
+              </button>
             </div>
           ) : (
             <EmptyState
@@ -705,7 +746,15 @@ export default function EntryDetailPage() {
             <div className="gallery-grid">
               {galleryItems.map((item, index) => (
                 <figure key={item.id} className="gallery-card">
-                  <img src={item.url} alt={`Gallery asset ${index + 1}`} />
+                  <button
+                    type="button"
+                    className="gallery-image-trigger"
+                    onClick={() =>
+                        openImagePreview(item.url, `Additional image ${index + 1}`, `gallery-${index + 1}`)
+                    }
+                  >
+                    <img src={item.url} alt={`Gallery asset ${index + 1}`} />
+                  </button>
                   {isEditing ? (
                     <button
                       type="button"
@@ -781,6 +830,7 @@ export default function EntryDetailPage() {
           </button>
         </section>
       ) : null}
+
     </div>
   );
 }

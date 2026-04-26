@@ -51,6 +51,7 @@ const createTables = async () => {
       
       -- Results
       pnl DECIMAL,
+      pnl_percentage DECIMAL,
       commission DECIMAL,
       swap DECIMAL,
       balance DECIMAL,
@@ -176,6 +177,18 @@ const runLiveMigrations = async () => {
     // Add execution timeframe image columns
     `ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS execution_tf_image_url TEXT`,
     `ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS execution_tf_image_filename TEXT`,
+    // Add stored percentage return per trade
+    `ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS pnl_percentage DECIMAL`,
+    // Backfill pnl percentage where we have both current balance and realized pnl
+    `UPDATE journal_entries
+     SET pnl_percentage = CASE
+       WHEN balance IS NOT NULL
+         AND pnl IS NOT NULL
+         AND ABS((balance - pnl)) > 0.000001
+       THEN ROUND(((pnl / (balance - pnl)) * 100)::numeric, 4)
+       ELSE pnl_percentage
+     END
+     WHERE pnl_percentage IS NULL`,
     // Fix: reset all unreviewed MT5 entries to NULL (NEEDS REVIEW) instead of false (OFF PLAN)
     // Only affects MT5 entries that have never been explicitly reviewed
     `UPDATE journal_entries SET following_plan = NULL WHERE mt5_ticket IS NOT NULL AND following_plan = false AND emotional_state IS NULL`,

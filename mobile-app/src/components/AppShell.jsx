@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import {
+  IoBarChartOutline,
   IoBookOutline,
+  IoCalendarOutline,
   IoHomeOutline,
+  IoImagesOutline,
   IoListOutline,
   IoMenu,
   IoSettingsOutline,
@@ -30,15 +33,29 @@ const navItems = [
     match: (pathname) => pathname.startsWith('/journal'),
   },
   {
+    label: 'Calendar',
+    to: '/calendar',
+    icon: IoCalendarOutline,
+    match: (pathname) => pathname.startsWith('/calendar'),
+  },
+  {
+    label: 'Evaluation Review',
+    to: '/execution-review',
+    icon: IoImagesOutline,
+    match: (pathname) => pathname.startsWith('/execution-review'),
+  },
+  {
+    label: 'Equity Curves',
+    to: '/account-growth',
+    icon: IoBarChartOutline,
+    match: (pathname) => pathname.startsWith('/account-growth'),
+  },
+  {
     label: 'Settings',
     to: '/settings',
     icon: IoSettingsOutline,
     match: (pathname) =>
-      pathname.startsWith('/settings') ||
-      pathname.startsWith('/calendar') ||
-      pathname.startsWith('/account-growth') ||
-      pathname.startsWith('/accounts/') ||
-      pathname.startsWith('/execution-review'),
+      pathname.startsWith('/settings') || pathname.startsWith('/accounts/'),
   },
 ];
 
@@ -191,24 +208,6 @@ export default function AppShell() {
         <main className="shell__main">
           <Outlet />
         </main>
-
-        <nav className="shell__mobile-tabbar" aria-label="Primary">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = item.match(location.pathname);
-
-            return (
-              <Link
-                key={`mobile-${item.to}`}
-                className={`shell__mobile-tab ${isActive ? 'is-active' : ''}`}
-                to={item.to}
-              >
-                <Icon size={24} />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
       </div>
     </div>
   );

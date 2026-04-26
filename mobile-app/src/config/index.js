@@ -6,7 +6,7 @@ const EXPO_BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 const LOCAL_API_URL = 'http://10.146.155.129:3000/api';
 
 // Production (Render Cloud)
-const PRODUCTION_API_URL = 'https://bulletproof-journal-1.onrender.com/api';
+const PRODUCTION_API_URL = 'https://web-journal-2r5u.onrender.com/api';
 
 export const API_URL = EXPO_BACKEND_URL || PRODUCTION_API_URL || LOCAL_API_URL;
 export const SUPABASE_URL = 'https://pjiishvyrepvltrklyjw.supabase.co';

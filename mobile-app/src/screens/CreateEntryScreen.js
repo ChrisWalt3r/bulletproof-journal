@@ -19,6 +19,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { journalAPI, imageAPI } from '../services/api';
 import { useAccount } from '../context/AccountContext';
 import AccountHeader from '../components/AccountHeader';
+import { APP_TIME_ZONE } from '../utils/dateUtils';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -80,7 +81,7 @@ const CreateEntryScreen = ({ navigation }) => {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
-      timeZone: 'Africa/Kampala'
+      timeZone: APP_TIME_ZONE
     });
 
     return ugandanDateString;

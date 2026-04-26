@@ -65,13 +65,13 @@ https://your-backend-domain
 If you are using the current web app defaults from this repo, the app already expects:
 
 ```text
-https://bulletproof-journal-1.onrender.com/api
+https://web-journal-2r5u.onrender.com/api
 ```
 
 So the MT5 webhook would be:
 
 ```text
-https://bulletproof-journal-1.onrender.com/api/mt5/webhook
+https://web-journal-2r5u.onrender.com/api/mt5/webhook
 ```
 
 ## 3. Create or choose the journal account in the app
@@ -102,7 +102,7 @@ If compile fails, make sure the file was copied into the MT5 data folder and ope
 1. In MT5, open `Tools -> Options -> Expert Advisors`.
 2. Check `Allow WebRequest for listed URL`.
 3. Add your backend base URL only, for example:
-   `https://bulletproof-journal-1.onrender.com`
+   `https://web-journal-2r5u.onrender.com`
 4. Click `OK`.
 
 Without this, MT5 returns `WebRequest = -1`.

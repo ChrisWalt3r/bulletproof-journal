@@ -16,7 +16,7 @@ import { journalAPI } from '../services/api';
 import { useAccount } from '../context/AccountContext';
 import AccountHeader from '../components/AccountHeader';
 import { useAccountChange } from '../context/useAccountChange';
-import { formatKampalaTime, getKampalaDateKey } from '../utils/dateUtils';
+import { APP_TIME_ZONE, formatKampalaTime, getKampalaDateKey } from '../utils/dateUtils';
 
 const { width } = Dimensions.get('window');
 const CALENDAR_WIDTH = width - 40;
@@ -447,7 +447,7 @@ const CalendarScreen = ({ navigation }) => {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
-      timeZone: 'Africa/Kampala'
+      timeZone: APP_TIME_ZONE
     });
 
     return { selectedDateString };

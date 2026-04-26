@@ -12,15 +12,16 @@ import EmptyState from '../components/EmptyState.jsx';
 import TradeEntryCard from '../components/TradeEntryCard.jsx';
 import { useAccount } from '../context/AccountContext.jsx';
 import { journalAPI } from '../services/api.js';
-import { extractContentDate, getEntryOutcome } from '../utils/tradeUtils.js';
-import { parseBackendTimestamp } from '../utils/dateUtils.js';
+import { getEntryOutcome } from '../utils/tradeUtils.js';
+import { getEntryTradeDate } from '../utils/tradeDates.js';
 
 const FILTER_OPTIONS = ['ALL', 'WIN', 'LOSS', 'BREAKEVEN'];
 const DATE_FILTERS = [
-  { id: 'ALL_TIME', label: 'All Time' },
+  { id: 'ALL_TIME', label: 'All' },
   { id: 'TODAY', label: 'Today' },
   { id: 'WEEK', label: 'This Week' },
   { id: 'MONTH', label: 'This Month' },
+  { id: 'YEAR', label: 'This Year' },
 ];
 
 export default function JournalPage() {
@@ -36,6 +37,17 @@ export default function JournalPage() {
 
   const deferredSearch = useDeferredValue(searchQuery);
   const activeFilter = searchParams.get('filter') || 'ALL';
+
+  useEffect(() => {
+    const queryRange = searchParams.get('range');
+    const allowed = new Set(DATE_FILTERS.map((option) => option.id));
+    if (queryRange && allowed.has(queryRange)) {
+      setDateFilter(queryRange);
+      return;
+    }
+
+    setDateFilter('ALL_TIME');
+  }, [searchParams]);
 
   useEffect(() => {
     const shouldSearch =
@@ -58,8 +70,7 @@ export default function JournalPage() {
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
       result = result.filter((entry) => {
-        const entryDate =
-          extractContentDate(entry.content) || parseBackendTimestamp(entry.created_at);
+        const entryDate = getEntryTradeDate(entry);
 
         if (!entryDate) {
           return false;
@@ -79,6 +90,11 @@ export default function JournalPage() {
         if (dateFilter === 'MONTH') {
           const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
           return entryDate >= monthStart;
+        }
+
+        if (dateFilter === 'YEAR') {
+          const yearStart = new Date(now.getFullYear(), 0, 1);
+          return entryDate >= yearStart;
         }
 
         return true;
@@ -132,6 +148,19 @@ export default function JournalPage() {
       next.delete('filter');
     } else {
       next.set('filter', filter);
+    }
+
+    setSearchParams(next, { replace: true });
+  };
+
+  const setDateFilterWithQuery = (filterId) => {
+    setDateFilter(filterId);
+
+    const next = new URLSearchParams(searchParams);
+    if (filterId === 'ALL_TIME') {
+      next.delete('range');
+    } else {
+      next.set('range', filterId);
     }
 
     setSearchParams(next, { replace: true });
@@ -225,7 +254,7 @@ export default function JournalPage() {
               key={filter.id}
               type="button"
               className={`filter-chip ${dateFilter === filter.id ? 'is-active' : ''}`}
-              onClick={() => setDateFilter(filter.id)}
+              onClick={() => setDateFilterWithQuery(filter.id)}
             >
               {filter.label}
             </button>

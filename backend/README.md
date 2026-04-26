@@ -37,6 +37,7 @@ Node.js Express API server for the Bulletproof Journal mobile application.
    PORT=3000
    NODE_ENV=development
    FRONTEND_URL=http://localhost:19006
+  MT5_WEBHOOK_SECRET=your-strong-shared-secret
    LOG_LEVEL=info
    ```
 
@@ -70,6 +71,28 @@ The server will start on `http://localhost:3000` (or the port specified in your 
 
 ### Health Check
 - `GET /api/health` - API health status
+
+## 🤖 MT5 Auto-Journaling
+
+The backend also exposes MT5 webhook endpoints for automatic trade journaling.
+
+### Webhook Endpoints
+- `POST /api/mt5/webhook` - Receive MT5 entry/exit deals
+- `POST /api/mt5/check-tickets` - Let the EA skip already-synced deals
+
+### Required Environment Variables
+```env
+MT5_WEBHOOK_SECRET=your-strong-shared-secret
+```
+
+### MT5 Setup Flow
+1. Start this backend on Render or locally.
+2. Copy the webhook URL shown in the app Settings page.
+3. Paste the same `MT5_WEBHOOK_SECRET` into the EA input `InpApiSecret`.
+4. Add the backend base URL to MT5 WebRequest allowlist.
+5. Attach the EA to one chart only and keep MT5 running.
+
+The current production backend URL is `https://web-journal-2r5u.onrender.com/api`.
 
 ## 🗄️ Database Schema
 

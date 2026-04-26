@@ -1,4 +1,5 @@
 import {
+  formatPnlPercentage,
   getEntryOutcome,
   getEntryPair,
   getEntrySummary,
@@ -18,6 +19,7 @@ export default function TradeEntryCard({
   const result = getEntryOutcome(entry);
   const pair = getEntryPair(entry);
   const planStatus = getPlanStatus(entry);
+  const summary = getEntrySummary(entry);
 
   return (
     <button
@@ -41,7 +43,9 @@ export default function TradeEntryCard({
               {getPlanStatusLabel(planStatus)}
             </span>
           </div>
-          <p>{getEntrySummary(entry)}</p>
+          <p className={`trade-card__summary ${entry?.mt5_ticket ? 'is-automated' : ''}`}>
+            {summary}
+          </p>
         </div>
         <div className="trade-card__meta">
           <span
@@ -54,12 +58,15 @@ export default function TradeEntryCard({
             {result}
           </span>
           {showPnl && entry?.pnl != null ? (
-            <strong
-              className="trade-card__pnl"
-              style={{ color: Number(entry.pnl) >= 0 ? '#16a34a' : '#dc2626' }}
-            >
-              {Number(entry.pnl) >= 0 ? '+' : ''}${Number(entry.pnl).toFixed(2)}
-            </strong>
+            <>
+              <strong
+                className="trade-card__pnl"
+                style={{ color: Number(entry.pnl) >= 0 ? '#16a34a' : '#dc2626' }}
+              >
+                {Number(entry.pnl) >= 0 ? '+' : ''}${Number(entry.pnl).toFixed(2)}
+              </strong>
+              <span className="trade-card__percent">{formatPnlPercentage(entry)}</span>
+            </>
           ) : null}
           <span className="trade-card__date">
             {formatKampalaSmartDate(entry?.created_at)}

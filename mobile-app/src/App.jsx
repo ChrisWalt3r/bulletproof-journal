@@ -24,6 +24,7 @@ import CalendarPage from './pages/CalendarPage.jsx';
 import AccountGrowthPage from './pages/AccountGrowthPage.jsx';
 import AccountJournalPage from './pages/AccountJournalPage.jsx';
 import ExecutionReviewPage from './pages/ExecutionReviewPage.jsx';
+import ImageViewerPage from './pages/ImageViewerPage.jsx';
 
 const PublicOnlyRoute = () => {
   const { user, loading } = useAuth();
@@ -65,6 +66,7 @@ const AppRoutes = () => {
       </Route>
 
       <Route element={<ProtectedRoute />}>
+        <Route path="/image-viewer/:entryId/:imageKey" element={<ImageViewerPage />} />
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/home" replace />} />
           <Route path="/home" element={<HomePage />} />

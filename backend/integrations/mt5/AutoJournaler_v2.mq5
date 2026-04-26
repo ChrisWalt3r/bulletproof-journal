@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Bulletproof Journal"
 #property link      "https://yourjournalapp.com"
-#property version   "3.11"
+#property version   "3.12"
 #property description "Universal Auto-Journaler: captures ALL trades across all"
 #property description "symbols (forex, indices, commodities, etc.) from a single"
 #property description "chart. Attach to any ONE chart — it monitors the entire account."
@@ -13,7 +13,7 @@
 #property strict
 
 // --- INPUTS ---
-input string   InpApiUrl      = "https://bulletproof-journal-1.onrender.com/api/mt5/webhook"; // API Webhook URL
+input string   InpApiUrl      = "https://web-journal-2r5u.onrender.com/api/mt5/webhook"; // API Webhook URL
 input string   InpApiSecret   = "";                                       // Webhook Secret (must match backend MT5_WEBHOOK_SECRET)
 input int      InpAccountId   = 1;                                // Journal Account ID
 input int      InpWidth       = 1366;                             // Screenshot Width

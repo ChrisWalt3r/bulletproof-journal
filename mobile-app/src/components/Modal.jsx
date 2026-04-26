@@ -5,16 +5,20 @@ export default function Modal({
   actions,
   onClose,
   width = '560px',
+  fullscreen = false,
 }) {
   if (!open) {
     return null;
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div
+      className={`modal-backdrop ${fullscreen ? 'modal-backdrop--fullscreen' : ''}`.trim()}
+      onClick={onClose}
+    >
       <div
-        className="modal"
-        style={{ maxWidth: width }}
+        className={`modal ${fullscreen ? 'modal--fullscreen' : ''}`.trim()}
+        style={fullscreen ? undefined : { maxWidth: width }}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="modal__header">

@@ -4,7 +4,7 @@ const http = require('http');
 require('dotenv').config();
 
 // Configuration
-const API_URL = 'http://localhost:3000/api/mt5/webhook';
+const API_URL = process.env.MT5_API_URL || 'http://localhost:3000/api/mt5/webhook';
 const SECRET = process.env.MT5_WEBHOOK_SECRET;
 const TICKET_ID = Math.floor(Math.random() * 1000000);
 

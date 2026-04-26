@@ -8,38 +8,19 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { IoTrendingDown, IoTrendingUp } from 'react-icons/io5';
+import { IoArrowBack, IoTrendingDown, IoTrendingUp } from 'react-icons/io5';
+import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/PageHeader.jsx';
 import LoadingScreen from '../components/LoadingScreen.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import { useAccount } from '../context/AccountContext.jsx';
 import { journalAPI } from '../services/api.js';
-import { formatKampalaDateTime } from '../utils/dateUtils.js';
-
-const TIME_FILTERS = [
-  { key: 'WEEK', label: '1W' },
-  { key: 'MONTH', label: '1M' },
-  { key: 'YEAR', label: '1Y' },
-  { key: 'ALL', label: 'All' },
-];
-
-const getFilterStartDate = (filterKey) => {
-  const now = new Date();
-
-  if (filterKey === 'WEEK') {
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
-  }
-
-  if (filterKey === 'MONTH') {
-    return new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-  }
-
-  if (filterKey === 'YEAR') {
-    return new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-  }
-
-  return null;
-};
+import { APP_TIME_ZONE, formatKampalaDateTime } from '../utils/dateUtils.js';
+import {
+  getEntryTradeDate,
+  isEntryInCustomDateRange,
+  parseCustomDateInput,
+} from '../utils/tradeDates.js';
 
 function GrowthTooltip({ active, payload }) {
   if (!active || !payload?.length) {
@@ -52,7 +33,7 @@ function GrowthTooltip({ active, payload }) {
     <div className="chart-tooltip">
       <strong>{point.symbol || 'Trade'}</strong>
       <span>{point.direction || 'Direction n/a'}</span>
-      <span>{formatKampalaDateTime(point.updatedAt)}</span>
+      <span>{formatKampalaDateTime(point.tradeDateValue)}</span>
       <strong style={{ color: point.pnl >= 0 ? '#16a34a' : '#dc2626' }}>
         {point.pnl >= 0 ? '+' : ''}${point.pnl.toFixed(2)}
       </strong>
@@ -61,10 +42,14 @@ function GrowthTooltip({ active, payload }) {
 }
 
 export default function AccountGrowthPage() {
+  const navigate = useNavigate();
   const { currentAccount } = useAccount();
-  const [timeFilter, setTimeFilter] = useState('ALL');
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [startDateInput, setStartDateInput] = useState('');
+  const [endDateInput, setEndDateInput] = useState('');
+  const [appliedStartDate, setAppliedStartDate] = useState(null);
+  const [appliedEndDate, setAppliedEndDate] = useState(null);
 
   useEffect(() => {
     const fetchAllEntries = async () => {
@@ -76,10 +61,22 @@ export default function AccountGrowthPage() {
 
       setLoading(true);
       try {
-        const response = await journalAPI.getEntries(1, 500, '', currentAccount.id);
-        const sortedEntries = (response.entries || []).sort(
-          (left, right) => new Date(left.updated_at) - new Date(right.updated_at)
-        );
+        const allEntries = [];
+        let page = 1;
+        let totalPages = 1;
+
+        do {
+          const response = await journalAPI.getEntries(page, 100, '', currentAccount.id);
+          allEntries.push(...(response.entries || []));
+          totalPages = response.pagination?.pages || 1;
+          page += 1;
+        } while (page <= totalPages);
+
+        const sortedEntries = allEntries.sort((left, right) => {
+          const leftDate = getEntryTradeDate(left) || new Date(left.created_at);
+          const rightDate = getEntryTradeDate(right) || new Date(right.created_at);
+          return leftDate - rightDate;
+        });
         setEntries(sortedEntries);
       } catch (error) {
         console.error('Failed to load growth data', error);
@@ -105,31 +102,37 @@ export default function AccountGrowthPage() {
     const growthPercentage =
       startingBalance > 0 ? (totalPnL / startingBalance) * 100 : 0;
 
-    const filterStart = getFilterStartDate(timeFilter);
-    const preFilterTrades = filterStart
-      ? closedTrades.filter((entry) => new Date(entry.updated_at) < filterStart)
-      : [];
-    const visibleTrades = filterStart
-      ? closedTrades.filter((entry) => new Date(entry.updated_at) >= filterStart)
-      : closedTrades;
+    const visibleTrades = closedTrades.filter((entry) =>
+      isEntryInCustomDateRange(entry, appliedStartDate, appliedEndDate)
+    );
+
+    const preFilterTrades = closedTrades.filter((entry) => {
+      if (!appliedStartDate) {
+        return false;
+      }
+
+      const tradeDate = getEntryTradeDate(entry);
+      return tradeDate ? tradeDate < appliedStartDate : false;
+    });
 
     let runningBalance =
       startingBalance +
       preFilterTrades.reduce((sum, entry) => sum + (Number(entry.pnl) || 0), 0);
 
     const chartPoints = visibleTrades.map((entry) => {
+      const tradeDate = getEntryTradeDate(entry) || new Date(entry.created_at);
       runningBalance += Number(entry.pnl) || 0;
       return {
         balance: Number(runningBalance.toFixed(2)),
-        label: new Date(entry.updated_at).toLocaleDateString('en-US', {
+        label: tradeDate.toLocaleDateString('en-US', {
           month: 'short',
           day: 'numeric',
-          timeZone: 'Africa/Kampala',
+          timeZone: APP_TIME_ZONE,
         }),
         pnl: Number(entry.pnl) || 0,
         direction: entry.direction,
         symbol: entry.symbol,
-        updatedAt: entry.updated_at,
+        tradeDateValue: tradeDate.toISOString(),
       };
     });
 
@@ -150,7 +153,30 @@ export default function AccountGrowthPage() {
         losses,
       },
     };
-  }, [currentAccount, entries, timeFilter]);
+  }, [appliedEndDate, appliedStartDate, currentAccount, entries]);
+
+  const applyFilter = () => {
+    const startDate = parseCustomDateInput(startDateInput);
+    const endDate = parseCustomDateInput(endDateInput);
+
+    if (startDateInput.trim() && startDate === undefined) {
+      window.alert('Use YYYY-MM-DD for the start date.');
+      return;
+    }
+
+    if (endDateInput.trim() && endDate === undefined) {
+      window.alert('Use YYYY-MM-DD for the end date.');
+      return;
+    }
+
+    if (startDate && endDate && startDate > endDate) {
+      window.alert('Start date must be before end date.');
+      return;
+    }
+
+    setAppliedStartDate(startDate || null);
+    setAppliedEndDate(endDate || null);
+  };
 
   if (loading) {
     return <LoadingScreen message="Loading growth curve..." compact />;
@@ -180,6 +206,12 @@ export default function AccountGrowthPage() {
         eyebrow="Equity Curve"
         title="Account growth"
         subtitle="Review your equity curve with responsive filters and hoverable trade detail."
+        actions={
+          <button type="button" className="ghost-button" onClick={() => navigate(-1)}>
+            <IoArrowBack size={18} />
+            Back
+          </button>
+        }
       />
 
       <section className="dashboard-hero">
@@ -221,22 +253,55 @@ export default function AccountGrowthPage() {
       </section>
 
       <section className="surface-card">
+        <div className="filter-grid">
+          <label className="field">
+            <span>From</span>
+            <input
+              type="date"
+              value={startDateInput}
+              onChange={(event) => setStartDateInput(event.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span>To</span>
+            <input
+              type="date"
+              value={endDateInput}
+              onChange={(event) => setEndDateInput(event.target.value)}
+            />
+          </label>
+          <div className="button-row">
+            <button type="button" className="primary-button" onClick={applyFilter}>
+              Apply Filter
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => {
+                setStartDateInput('');
+                setEndDateInput('');
+                setAppliedStartDate(null);
+                setAppliedEndDate(null);
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="surface-card chart-panel">
         <div className="section-heading">
           <div>
             <span className="section-heading__eyebrow">Chart</span>
             <h2>Equity curve</h2>
+            <p className="chart-panel__subtitle">
+              View realized balance movement for your selected custom date range.
+            </p>
           </div>
-          <div className="filter-row">
-            {TIME_FILTERS.map((filter) => (
-              <button
-                key={filter.key}
-                type="button"
-                className={`filter-chip ${timeFilter === filter.key ? 'is-active' : ''}`}
-                onClick={() => setTimeFilter(filter.key)}
-              >
-                {filter.label}
-              </button>
-            ))}
+          <div className="chart-panel__summary">
+            <span>Starting balance</span>
+            <strong>${stats.startBalance.toFixed(2)}</strong>
           </div>
         </div>
 

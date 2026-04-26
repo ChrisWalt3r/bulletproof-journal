@@ -1,4 +1,4 @@
-const DEFAULT_API_URL = 'https://bulletproof-journal-1.onrender.com/api';
+const DEFAULT_API_URL = 'https://web-journal-2r5u.onrender.com/api';
 const DEFAULT_SUPABASE_URL = 'https://pjiishvyrepvltrklyjw.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqaWlzaHZ5cmVwdmx0cmtseWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2OTAwNTksImV4cCI6MjA4NTI2NjA1OX0.2AIRP7XchehlUQEy93973iICILWS4Cg2CQnHkHH93Lg';

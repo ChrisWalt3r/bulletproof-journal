@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   IoCalendarOutline,
@@ -17,11 +17,10 @@ import TradeEntryCard from '../components/TradeEntryCard.jsx';
 import { useAccount } from '../context/AccountContext.jsx';
 import { journalAPI } from '../services/api.js';
 import {
-  extractContentDate,
   getEntryOutcome,
   getEntryPair,
 } from '../utils/tradeUtils.js';
-import { parseBackendTimestamp } from '../utils/dateUtils.js';
+import { getEntryTradeDate } from '../utils/tradeDates.js';
 
 const initialAnalytics = {
   totalTrades: 0,
@@ -33,10 +32,46 @@ const initialAnalytics = {
   recentTrades: [],
 };
 
+const OUTCOME_RANGE_FILTERS = [
+  { id: 'TODAY', label: 'Today' },
+  { id: 'WEEK', label: 'Week' },
+  { id: 'MONTH', label: 'Month' },
+  { id: 'YEAR', label: 'Year' },
+  { id: 'ALL', label: 'All' },
+];
+
+const getRangeStart = (rangeId) => {
+  const now = new Date();
+
+  if (rangeId === 'TODAY') {
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  }
+
+  if (rangeId === 'WEEK') {
+    const weekStart = new Date(now);
+    const mondayOffset = (now.getDay() + 6) % 7;
+    weekStart.setDate(now.getDate() - mondayOffset);
+    weekStart.setHours(0, 0, 0, 0);
+    return weekStart;
+  }
+
+  if (rangeId === 'MONTH') {
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  }
+
+  if (rangeId === 'YEAR') {
+    return new Date(now.getFullYear(), 0, 1);
+  }
+
+  return null;
+};
+
 export default function HomePage() {
   const navigate = useNavigate();
   const { currentAccount, accounts, isLoading: accountLoading } = useAccount();
   const [analytics, setAnalytics] = useState(initialAnalytics);
+  const [entries, setEntries] = useState([]);
+  const [outcomeRange, setOutcomeRange] = useState('ALL');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,24 +86,32 @@ export default function HomePage() {
 
       try {
         await journalAPI.syncMt5Entries(currentAccount.id);
-        const response = await journalAPI.getEntries(1, 100, '', currentAccount.id);
-        const entries = response.entries || [];
-        const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const allEntries = [];
+        let page = 1;
+        let totalPages = 1;
+
+        do {
+          const response = await journalAPI.getEntries(page, 100, '', currentAccount.id);
+          allEntries.push(...(response.entries || []));
+          totalPages = response.pagination?.pages || 1;
+          page += 1;
+        } while (page <= totalPages);
+
+        const weekStart = getRangeStart('WEEK');
 
         let wins = 0;
         let losses = 0;
         let breakevens = 0;
         let thisWeekTrades = 0;
 
-        entries.forEach((entry) => {
+        allEntries.forEach((entry) => {
           const result = getEntryOutcome(entry);
           if (result === 'WIN') wins += 1;
           if (result === 'LOSS') losses += 1;
           if (result === 'BREAKEVEN') breakevens += 1;
 
-          const entryDate =
-            extractContentDate(entry.content) || parseBackendTimestamp(entry.created_at);
-          if (entryDate && entryDate >= weekAgo) {
+          const tradeDate = getEntryTradeDate(entry);
+          if (tradeDate && weekStart && tradeDate >= weekStart) {
             thisWeekTrades += 1;
           }
         });
@@ -83,8 +126,15 @@ export default function HomePage() {
           wins,
           losses,
           breakevens,
-          recentTrades: entries.slice(0, 5),
+          recentTrades: [...allEntries]
+            .sort((left, right) => {
+              const leftDate = getEntryTradeDate(left) || new Date(left.created_at);
+              const rightDate = getEntryTradeDate(right) || new Date(right.created_at);
+              return rightDate - leftDate;
+            })
+            .slice(0, 5),
         });
+        setEntries(allEntries);
       } catch (error) {
         console.error('Failed to load home analytics', error);
         window.alert('Failed to load trading analytics.');
@@ -97,6 +147,33 @@ export default function HomePage() {
       loadAnalytics();
     }
   }, [accountLoading, currentAccount]);
+
+  const visibleOutcomeEntries = useMemo(() => {
+    const rangeStart = getRangeStart(outcomeRange);
+    if (!rangeStart) {
+      return entries;
+    }
+
+    return entries.filter((entry) => {
+      const tradeDate = getEntryTradeDate(entry);
+      return tradeDate ? tradeDate >= rangeStart : false;
+    });
+  }, [entries, outcomeRange]);
+
+  const breakdownCounts = useMemo(() => {
+    let wins = 0;
+    let losses = 0;
+    let breakevens = 0;
+
+    visibleOutcomeEntries.forEach((entry) => {
+      const result = getEntryOutcome(entry);
+      if (result === 'WIN') wins += 1;
+      if (result === 'LOSS') losses += 1;
+      if (result === 'BREAKEVEN') breakevens += 1;
+    });
+
+    return { wins, losses, breakevens };
+  }, [visibleOutcomeEntries]);
 
   if (loading || accountLoading) {
     return <LoadingScreen message="Loading trading analytics..." compact />;
@@ -163,21 +240,21 @@ export default function HomePage() {
   const breakdown = [
     {
       label: 'Wins',
-      count: analytics.wins,
+      count: breakdownCounts.wins,
       icon: <IoCheckmarkCircle size={18} />,
       filter: 'WIN',
       color: '#22c55e',
     },
     {
       label: 'Losses',
-      count: analytics.losses,
+      count: breakdownCounts.losses,
       icon: <IoCloseCircle size={18} />,
       filter: 'LOSS',
       color: '#ef4444',
     },
     {
       label: 'Breakeven',
-      count: analytics.breakevens,
+      count: breakdownCounts.breakevens,
       icon: <IoRemoveCircle size={18} />,
       filter: 'BREAKEVEN',
       color: '#3b82f6',
@@ -234,13 +311,32 @@ export default function HomePage() {
             </div>
           </div>
 
+          <div className="filter-row">
+            {OUTCOME_RANGE_FILTERS.map((filter) => (
+              <button
+                key={filter.id}
+                type="button"
+                className={`filter-chip ${outcomeRange === filter.id ? 'is-active' : ''}`}
+                onClick={() => setOutcomeRange(filter.id)}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+
           <div className="breakdown-grid">
             {breakdown.map((item) => (
               <button
                 key={item.label}
                 type="button"
                 className="breakdown-card"
-                onClick={() => navigate(`/journal?filter=${item.filter}`)}
+                onClick={() =>
+                  navigate(
+                    `/journal?filter=${item.filter}&range=${
+                      outcomeRange === 'ALL' ? 'ALL_TIME' : outcomeRange
+                    }`
+                  )
+                }
               >
                 <span
                   className="breakdown-card__icon"

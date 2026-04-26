@@ -22,7 +22,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { journalAPI, imageAPI } from '../services/api';
 import { useAccount } from '../context/AccountContext';
-import { formatKampalaDate, formatKampalaTime } from '../utils/dateUtils';
+import { APP_TIME_ZONE, formatKampalaDate, formatKampalaTime } from '../utils/dateUtils';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -305,7 +305,7 @@ const EntryDetailScreen = ({ route, navigation }) => {
   // ---- Save ----
   const generateJournalContent = () => {
     const date = new Date().toLocaleDateString('en-US', {
-      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Africa/Kampala',
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: APP_TIME_ZONE,
     });
     let content = `Date: ${date}\n\n${setupImage ? 'SETUP IMAGE: [Image Attached]' : 'SETUP IMAGE: [No Image]'}\n\n### Pair:\n`;
     pairsList.forEach(p => { content += `- [${selectedPairs.includes(p) ? 'x' : ' '}] ${p}\n`; });

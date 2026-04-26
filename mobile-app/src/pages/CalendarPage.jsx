@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  IoArrowBack,
   IoCalendarOutline,
   IoChevronBack,
   IoChevronForward,
@@ -182,6 +183,12 @@ export default function CalendarPage() {
         eyebrow="Calendar"
         title="Trading calendar"
         subtitle="Switch between outcome and plan adherence views, then drill into trades for the selected date."
+        actions={
+          <button type="button" className="ghost-button" onClick={() => navigate(-1)}>
+            <IoArrowBack size={18} />
+            Back
+          </button>
+        }
       />
 
       <section className="surface-card">

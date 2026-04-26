@@ -18,6 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { journalAPI, imageAPI } from '../services/api';
 import { useAccount } from '../context/AccountContext';
+import { APP_TIME_ZONE } from '../utils/dateUtils';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -110,7 +111,7 @@ const EditEntryScreen = ({ route, navigation }) => {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
-      timeZone: 'Africa/Kampala'
+      timeZone: APP_TIME_ZONE
     });
   };
 

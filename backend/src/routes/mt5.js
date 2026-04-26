@@ -6,6 +6,22 @@ const storageService = require('../services/storage');
 
 const router = express.Router();
 
+function calculatePnlPercentage(pnl, balance) {
+    const realizedPnl = Number(pnl);
+    const endingBalance = Number(balance);
+
+    if (!Number.isFinite(realizedPnl) || !Number.isFinite(endingBalance)) {
+        return null;
+    }
+
+    const startingBalance = endingBalance - realizedPnl;
+    if (!Number.isFinite(startingBalance) || Math.abs(startingBalance) < 0.000001) {
+        return null;
+    }
+
+    return Number(((realizedPnl / startingBalance) * 100).toFixed(4));
+}
+
 // ============ Asset Classification ============
 // Classifies MT5 symbols into asset types for filtering & analytics
 function classifyAsset(symbol) {
@@ -351,6 +367,7 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
 
         } else if (action === 'EXIT') {
             const totalPnL = parseFloat(profit || 0) + parseFloat(commission || 0) + parseFloat(swap || 0);
+            const pnlPercentage = calculatePnlPercentage(totalPnL, balance);
 
             // Parse deal time from MT5 for orphaned exits
             let exitTimestamp = new Date();
@@ -382,10 +399,10 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                     const result = await runQuery(`
                         INSERT INTO journal_entries (
                             title, content, tags, is_private, account_id,
-                            mt5_ticket, mt5_position_id, symbol, direction, after_image_url, 
-                            exit_price, pnl, commission, swap, balance,
+                        mt5_ticket, mt5_position_id, symbol, direction, after_image_url, 
+                            exit_price, pnl, pnl_percentage, commission, swap, balance,
                             asset_type, following_plan, mt5_exit_ticket, created_at, updated_at
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $19)
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $20)
                         RETURNING id
                     `, [
                         `MT5 Exit: ${type} ${symbol}`,
@@ -400,6 +417,7 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                         imageUrl,
                         price,
                         totalPnL,
+                        pnlPercentage,
                         commission || 0,
                         swap || 0,
                         balance || 0,
@@ -417,17 +435,19 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                       after_image_url = COALESCE($1, after_image_url),
                       exit_price = $2,
                       pnl = $3,
-                      commission = $4,
-                      swap = $5,
-                      balance = $6,
-                      mt5_position_id = COALESCE($7, mt5_position_id),
-                      mt5_exit_ticket = $9,
+                      pnl_percentage = COALESCE($4, pnl_percentage),
+                      commission = $5,
+                      swap = $6,
+                      balance = $7,
+                      mt5_position_id = COALESCE($8, mt5_position_id),
+                      mt5_exit_ticket = $10,
                       updated_at = NOW()
-                    WHERE id = $8
+                    WHERE id = $9
                 `, [
                     imageUrl,
                     price,
                     totalPnL,
+                    pnlPercentage,
                     commission || 0,
                     swap || 0,
                     balance || 0,
@@ -445,16 +465,18 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                   after_image_url = COALESCE($1, after_image_url),
                   exit_price = $2,
                   pnl = $3,
-                  commission = $4,
-                  swap = $5,
-                  balance = $6,
-                  mt5_exit_ticket = $8,
+                  pnl_percentage = COALESCE($4, pnl_percentage),
+                  commission = $5,
+                  swap = $6,
+                  balance = $7,
+                  mt5_exit_ticket = $9,
                   updated_at = NOW()
-                WHERE id = $7
+                WHERE id = $8
             `, [
                 imageUrl,
                 price,
                 totalPnL,
+                pnlPercentage,
                 commission || 0,
                 swap || 0,
                 balance || 0,

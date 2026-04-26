@@ -5,9 +5,7 @@ import {
   IoCalendarOutline,
   IoCheckmarkCircle,
   IoColorPaletteOutline,
-  IoLinkOutline,
   IoLogOutOutline,
-  IoShieldCheckmarkOutline,
   IoRefresh,
   IoStatsChartOutline,
   IoTrashOutline,
@@ -17,7 +15,6 @@ import PageHeader from '../components/PageHeader.jsx';
 import Modal from '../components/Modal.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import LoadingScreen from '../components/LoadingScreen.jsx';
-import { API_URL } from '../config/env.js';
 import { APP_VERSION } from '../config/env.js';
 import { useAccount } from '../context/AccountContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -53,8 +50,6 @@ export default function SettingsPage() {
     starting_balance: '',
   });
   const [savingAccount, setSavingAccount] = useState(false);
-  const webhookUrl = API_URL.replace(/\/api\/?$/, '/api/mt5/webhook');
-  const whitelistUrl = API_URL.replace(/\/api\/?$/, '');
 
   useEffect(() => {
     fetchAccounts();
@@ -292,56 +287,6 @@ export default function SettingsPage() {
             }
           />
         )}
-      </section>
-
-      <section className="surface-card">
-        <div className="section-heading">
-          <div>
-            <span className="section-heading__eyebrow">MT5 Auto-Journaling</span>
-            <h2>Expert adviser setup</h2>
-          </div>
-        </div>
-
-        <div className="mt5-setup-grid">
-          <article className="info-panel mt5-setup-card">
-            <strong>
-              <IoLinkOutline size={18} />
-              Connection values
-            </strong>
-            <p>Use these values when you attach the EA in MT5 desktop.</p>
-            <div className="mt5-setup-values">
-              <div>
-                <span>Allow WebRequest URL</span>
-                <code>{whitelistUrl}</code>
-              </div>
-              <div>
-                <span>Webhook URL</span>
-                <code>{webhookUrl}</code>
-              </div>
-              <div>
-                <span>Journal Account ID</span>
-                <code>{currentAccount?.id ?? 'Select an account first'}</code>
-              </div>
-            </div>
-          </article>
-
-          <article className="info-panel mt5-setup-card">
-            <strong>
-              <IoShieldCheckmarkOutline size={18} />
-              What still needs your input
-            </strong>
-            <p>
-              Set a strong <code>MT5_WEBHOOK_SECRET</code> on the backend, then use the
-              exact same value in the EA&apos;s <code>InpApiSecret</code> field.
-            </p>
-            <div className="mt5-setup-checklist">
-              <span>1. Create or activate the account you want MT5 to journal into.</span>
-              <span>2. Compile and attach the EA to one MT5 chart only.</span>
-              <span>3. Enable Algo Trading and whitelist the backend URL in MT5.</span>
-              <span>4. Place a small test trade and confirm the entry lands here automatically.</span>
-            </div>
-          </article>
-        </div>
       </section>
 
       <section className="surface-card settings-account-panel">

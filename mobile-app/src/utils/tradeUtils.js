@@ -1,4 +1,4 @@
-import { formatKampalaDateTime } from './dateUtils.js';
+import { APP_TIME_ZONE, formatKampalaDateTime } from './dateUtils.js';
 import { extractTradeDateFromContent } from './tradeDates.js';
 
 export const PAIRS = [
@@ -21,7 +21,7 @@ export const getCurrentKampalaDateLabel = () =>
     year: 'numeric',
     month: 'long',
     day: 'numeric',
-    timeZone: 'Africa/Kampala',
+    timeZone: APP_TIME_ZONE,
   });
 
 export const extractContentDate = (content) =>
@@ -199,14 +199,14 @@ export const parseManualEntryContent = (content) => {
       : content.includes('- [x] BREAKEVEN')
         ? 'BREAKEVEN'
         : '';
-  const riskRewardMatch = content.match(/##### RR > (.+?):/);
+  const riskRewardMatch = content.match(/#####\s*RR\s*>\s*([^:\n]+?)\s*:/i);
   const notesMatch = content.match(/Notes:\n>\s*([\s\S]*)$/);
 
   return {
     selectedPair,
     tradeDirection,
     tradeResult,
-    riskReward: riskRewardMatch?.[1]?.replace('_', '') || '',
+    riskReward: riskRewardMatch?.[1]?.replace(/_/g, '').trim() || '',
     notes: notesMatch?.[1]?.trim() || '',
   };
 };
@@ -252,6 +252,10 @@ export const getEntrySummary = (entry) => {
   }
 
   const firstLine = entry.content.split('\n')[0]?.replace('Date: ', '').trim();
+  if (entry?.mt5_ticket && firstLine?.startsWith('Automated Entry:')) {
+    return firstLine.replace('Automated Entry:', 'Auto Entry:').trim();
+  }
+
   return firstLine || formatKampalaDateTime(entry.created_at);
 };
 
@@ -264,10 +268,59 @@ export const formatMoney = (value) => {
   return `${number >= 0 ? '+' : '-'}$${Math.abs(number).toFixed(2)}`;
 };
 
+export const getPnlPercentageValue = (entry) => {
+  if (!entry) {
+    return null;
+  }
+
+  if (
+    entry.pnl_percentage !== null &&
+    entry.pnl_percentage !== undefined &&
+    entry.pnl_percentage !== ''
+  ) {
+    const stored = Number(entry.pnl_percentage);
+    if (Number.isFinite(stored)) {
+      return stored;
+    }
+  }
+
+  const pnl = Number(entry.pnl);
+  const balance = Number(entry.balance);
+
+  if (!Number.isFinite(pnl) || !Number.isFinite(balance)) {
+    return null;
+  }
+
+  const priorBalance = balance - pnl;
+  if (!Number.isFinite(priorBalance) || Math.abs(priorBalance) < 0.000001) {
+    return null;
+  }
+
+  return (pnl / priorBalance) * 100;
+};
+
+export const formatPnlPercentage = (entry) => {
+  const value = getPnlPercentageValue(entry);
+  if (!Number.isFinite(value)) {
+    return 'N/A';
+  }
+
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+};
+
 export const getRiskRewardValue = (entry) => {
   const parsed = parseManualEntryContent(entry?.content || '');
   if (parsed.riskReward) {
     return parsed.riskReward;
+  }
+
+  const structuredRiskReward =
+    entry?.risk_reward_ratio ?? entry?.risk_reward ?? entry?.rr ?? null;
+  if (structuredRiskReward !== null && structuredRiskReward !== undefined) {
+    const normalized = String(structuredRiskReward).trim();
+    if (normalized) {
+      return normalized;
+    }
   }
 
   const entryPrice = Number(entry?.entry_price);

@@ -1,4 +1,5 @@
-const KAMPALA_TIME_ZONE = 'Africa/Kampala';
+const APP_TIME_ZONE = 'America/New_York';
+const KAMPALA_TIME_ZONE = APP_TIME_ZONE;
 
 const safeNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -59,7 +60,7 @@ export const formatKampalaTime = (timestamp, options = {}) => {
   return date.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
-    timeZone: KAMPALA_TIME_ZONE,
+    timeZone: APP_TIME_ZONE,
     ...options,
   });
 };
@@ -74,7 +75,7 @@ export const formatKampalaDate = (timestamp, options = {}) => {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
-    timeZone: KAMPALA_TIME_ZONE,
+    timeZone: APP_TIME_ZONE,
     ...options,
   });
 };
@@ -89,12 +90,12 @@ export const formatKampalaDateTime = (timestamp) => {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
-    timeZone: KAMPALA_TIME_ZONE,
+    timeZone: APP_TIME_ZONE,
   });
   const timeStr = date.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
-    timeZone: KAMPALA_TIME_ZONE,
+    timeZone: APP_TIME_ZONE,
   });
 
   return `${dateStr} | ${timeStr}`;
@@ -108,13 +109,13 @@ export const formatKampalaSmartDate = (timestamp) => {
 
   const now = new Date();
   const today = now.toLocaleDateString('en-US', {
-    timeZone: KAMPALA_TIME_ZONE,
+    timeZone: APP_TIME_ZONE,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
   });
   const entryDate = date.toLocaleDateString('en-US', {
-    timeZone: KAMPALA_TIME_ZONE,
+    timeZone: APP_TIME_ZONE,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -123,7 +124,7 @@ export const formatKampalaSmartDate = (timestamp) => {
   const yesterday = new Date(now.getTime() - 86400000).toLocaleDateString(
     'en-US',
     {
-      timeZone: KAMPALA_TIME_ZONE,
+      timeZone: APP_TIME_ZONE,
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -144,7 +145,7 @@ export const formatKampalaSmartDate = (timestamp) => {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
-    timeZone: KAMPALA_TIME_ZONE,
+    timeZone: APP_TIME_ZONE,
   });
 
   return `${label} | ${timeStr}`;
@@ -160,7 +161,7 @@ export const getKampalaDateKey = (timestamp) => {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-    timeZone: KAMPALA_TIME_ZONE,
+    timeZone: APP_TIME_ZONE,
   });
 
   return formatter.format(date);
@@ -168,4 +169,4 @@ export const getKampalaDateKey = (timestamp) => {
 
 export const getKampalaDate = (timestamp) => parseBackendTimestamp(timestamp);
 
-export { KAMPALA_TIME_ZONE };
+export { APP_TIME_ZONE, KAMPALA_TIME_ZONE };

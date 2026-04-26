@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { IoImagesOutline } from 'react-icons/io5';
+import { IoArrowBack, IoImagesOutline } from 'react-icons/io5';
 import PageHeader from '../components/PageHeader.jsx';
 import LoadingScreen from '../components/LoadingScreen.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -9,6 +9,7 @@ import { journalAPI } from '../services/api.js';
 import { formatKampalaDateTime } from '../utils/dateUtils.js';
 import {
   formatTradeDateTitle,
+  getEntryTradeDate,
   isEntryInCustomDateRange,
   parseCustomDateInput,
 } from '../utils/tradeDates.js';
@@ -61,9 +62,49 @@ export default function ExecutionReviewPage() {
     () =>
       entries
         .filter((entry) => isEntryInCustomDateRange(entry, appliedStartDate, appliedEndDate))
-        .sort((left, right) => new Date(right.created_at) - new Date(left.created_at)),
+        .sort((left, right) => {
+          const leftDate = getEntryTradeDate(left) || new Date(left.created_at);
+          const rightDate = getEntryTradeDate(right) || new Date(right.created_at);
+          return rightDate - leftDate;
+        }),
     [appliedEndDate, appliedStartDate, entries]
   );
+
+  const openEntryImageViewer = (entryId) => {
+    const imageEntries = filteredEntries
+      .filter((entry) => Boolean(entry.execution_tf_image_url))
+      .map((entry) => ({
+        id: entry.id,
+        src: entry.execution_tf_image_url,
+        title: `${getEntryPair(entry)} execution image`,
+        subtitle: formatTradeDateTitle(entry),
+        dateTime: formatKampalaDateTime(entry.created_at),
+      }));
+
+    const currentIndex = Math.max(
+      imageEntries.findIndex((item) => item.id === entryId),
+      0
+    );
+    const currentEntry = imageEntries[currentIndex] || imageEntries[0];
+
+    if (!currentEntry) {
+      return;
+    }
+
+    navigate(
+      `/image-viewer/${currentEntry.id}/execution?title=${encodeURIComponent(
+        currentEntry.title
+      )}`,
+      {
+        state: {
+          from: '/execution-review',
+          initialIndex: currentIndex,
+          images: imageEntries,
+          canOpenEntry: true,
+        },
+      }
+    );
+  };
 
   const applyFilter = () => {
     const startDate = parseCustomDateInput(startDateInput);
@@ -94,6 +135,12 @@ export default function ExecutionReviewPage() {
         eyebrow="Execution Review"
         title="Execution timeframe gallery"
         subtitle="Browse all trades that include an execution timeframe image and narrow them by custom date range."
+        actions={
+          <button type="button" className="ghost-button" onClick={() => navigate(-1)}>
+            <IoArrowBack size={18} />
+            Back
+          </button>
+        }
       />
 
       <section className="surface-card">
@@ -101,19 +148,17 @@ export default function ExecutionReviewPage() {
           <label className="field">
             <span>From</span>
             <input
-              type="text"
+              type="date"
               value={startDateInput}
               onChange={(event) => setStartDateInput(event.target.value)}
-              placeholder="2026-04-01"
             />
           </label>
           <label className="field">
             <span>To</span>
             <input
-              type="text"
+              type="date"
               value={endDateInput}
               onChange={(event) => setEndDateInput(event.target.value)}
-              placeholder="2026-04-30"
             />
           </label>
           <div className="button-row">
@@ -155,7 +200,7 @@ export default function ExecutionReviewPage() {
                   key={entry.id}
                   type="button"
                   className="execution-card"
-                  onClick={() => navigate(`/journal/${entry.id}`)}
+                  onClick={() => openEntryImageViewer(entry.id)}
                 >
                   <img
                     src={entry.execution_tf_image_url}
