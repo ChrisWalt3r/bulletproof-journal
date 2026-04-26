@@ -620,6 +620,30 @@ a {
   gap: 1rem;
 }
 
+.page--journal .page-header--hero .journal-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.page--journal .page-header--hero .journal-header-actions .primary-button,
+.page--journal .page-header--hero .journal-header-actions .secondary-button {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.page--journal .page-header--hero .journal-header-actions .primary-button {
+  background: linear-gradient(135deg, rgba(74, 144, 226, 0.9), rgba(48, 87, 213, 0.88));
+  border-color: transparent;
+}
+
+.page--journal .page-header--hero .journal-header-actions .secondary-button {
+  color: rgba(255, 255, 255, 0.98);
+}
+
 .search-field {
   display: flex;
   align-items: center;

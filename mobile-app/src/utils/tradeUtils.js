@@ -24,8 +24,33 @@ export const getCurrentKampalaDateLabel = () =>
     timeZone: APP_TIME_ZONE,
   });
 
+export const formatManualTradeDateLabel = (value) => {
+  const parsed = value ? new Date(value) : new Date();
+  const date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+
+  return date.toLocaleString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: APP_TIME_ZONE,
+  });
+};
+
 export const extractContentDate = (content) =>
   extractTradeDateFromContent(content);
+
+const extractLabeledValue = (content, label) => {
+  if (!content || typeof content !== 'string') {
+    return '';
+  }
+
+  const pattern = new RegExp(`^${label}\\s*:\\s*(.+)$`, 'im');
+  return content.match(pattern)?.[1]?.trim() || '';
+};
 
 export const getEntryPair = (entryOrContent, symbol) => {
   if (typeof entryOrContent === 'object' && entryOrContent !== null) {
@@ -42,6 +67,11 @@ export const getEntryPair = (entryOrContent, symbol) => {
   const content = entryOrContent;
   if (!content || typeof content !== 'string') {
     return 'Unknown';
+  }
+
+  const labeledPair = extractLabeledValue(content, 'Pair');
+  if (labeledPair) {
+    return labeledPair;
   }
 
   const lines = content.split('\n');
@@ -74,12 +104,12 @@ export const getEntryPair = (entryOrContent, symbol) => {
 };
 
 export const getEntryOutcome = (entry) => {
-  if (entry?.mt5_ticket) {
-    if (entry.pnl == null) {
-      return 'OPEN';
+  if (entry?.pnl != null && entry?.pnl !== '') {
+    const pnl = Number(entry.pnl);
+    if (!Number.isFinite(pnl)) {
+      return 'UNKNOWN';
     }
 
-    const pnl = Number(entry.pnl);
     if (pnl > 0.01) {
       return 'WIN';
     }
@@ -89,10 +119,20 @@ export const getEntryOutcome = (entry) => {
     return 'BREAKEVEN';
   }
 
+  if (entry?.mt5_ticket) {
+    return 'OPEN';
+  }
+
   const content = entry?.content;
   if (!content || typeof content !== 'string') {
     return 'UNKNOWN';
   }
+
+  const labeledOutcome = extractLabeledValue(content, 'Outcome').toUpperCase();
+  if (['WIN', 'LOSS', 'BREAKEVEN'].includes(labeledOutcome)) {
+    return labeledOutcome;
+  }
+
   if (content.includes('- [x] WIN')) {
     return 'WIN';
   }
@@ -182,31 +222,51 @@ export const parseManualEntryContent = (content) => {
       tradeDirection: '',
       tradeResult: '',
       riskReward: '',
+      pnl: '',
+      pnlPercentage: '',
+      planStatus: '',
+      emotionalState: '',
       notes: '',
     };
   }
 
   const selectedPair = getEntryPair(content);
-  const tradeDirection = content.includes('- [x] BUY')
+  const tradeDirectionLabel = extractLabeledValue(content, 'Direction').toUpperCase();
+  const tradeResultLabel = extractLabeledValue(content, 'Outcome').toUpperCase();
+  const tradeDirection = ['BUY', 'SELL'].includes(tradeDirectionLabel)
+    ? tradeDirectionLabel
+    : content.includes('- [x] BUY')
     ? 'BUY'
     : content.includes('- [x] SELL')
       ? 'SELL'
       : '';
-  const tradeResult = content.includes('- [x] WIN')
+  const tradeResult = ['WIN', 'LOSS', 'BREAKEVEN'].includes(tradeResultLabel)
+    ? tradeResultLabel
+    : content.includes('- [x] WIN')
     ? 'WIN'
     : content.includes('- [x] LOSS')
       ? 'LOSS'
       : content.includes('- [x] BREAKEVEN')
         ? 'BREAKEVEN'
         : '';
+  const labeledRiskReward = extractLabeledValue(content, 'Risk : Reward');
   const riskRewardMatch = content.match(/#####\s*RR\s*>\s*([^:\n]+?)\s*:/i);
+  const labeledPnl = extractLabeledValue(content, 'P&L');
+  const labeledPnlPercentage = extractLabeledValue(content, 'P&L %').replace('%', '');
+  const labeledPlanStatus = extractLabeledValue(content, 'Plan Status').toUpperCase();
+  const labeledEmotionalState = extractLabeledValue(content, 'Emotional State');
   const notesMatch = content.match(/Notes:\n>\s*([\s\S]*)$/);
 
   return {
     selectedPair,
     tradeDirection,
     tradeResult,
-    riskReward: riskRewardMatch?.[1]?.replace(/_/g, '').trim() || '',
+    riskReward:
+      labeledRiskReward || riskRewardMatch?.[1]?.replace(/_/g, '').trim() || '',
+    pnl: labeledPnl,
+    pnlPercentage: labeledPnlPercentage,
+    planStatus: labeledPlanStatus,
+    emotionalState: labeledEmotionalState,
     notes: notesMatch?.[1]?.trim() || '',
   };
 };
@@ -216,15 +276,41 @@ export const buildManualEntryContent = ({
   tradeDirection,
   tradeResult,
   riskReward,
+  pnl,
+  pnlPercentage,
+  planStatus,
+  emotionalState,
   notes,
+  tradeDateTime,
   hasSetupImage,
+  hasExecutionImage,
+  additionalImageCount,
 }) => {
-  let content = `Date: ${getCurrentKampalaDateLabel()}\n\n${
-    hasSetupImage ? 'SETUP IMAGE: [Image Attached]' : 'SETUP IMAGE: [No Image]'
-  }\n\n### Pair:\n`;
+  const normalizedPair = selectedPair?.trim() || 'Unknown';
+  const normalizedPnl = pnl == null || pnl === '' ? '_' : String(pnl).trim();
+  const normalizedPnlPercentage =
+    pnlPercentage == null || pnlPercentage === '' ? '_' : String(pnlPercentage).trim();
+  const normalizedPlanStatus = planStatus || '_';
+  const normalizedEmotionalState = emotionalState?.trim() || '_';
+  const normalizedAdditionalImages = Number(additionalImageCount) || 0;
+
+  let content = `Date: ${formatManualTradeDateLabel(tradeDateTime)}\n`;
+  content += `Pair: ${normalizedPair}\n`;
+  content += `Direction: ${tradeDirection || '_'}\n`;
+  content += `Outcome: ${tradeResult || '_'}\n`;
+  content += `Risk : Reward: ${riskReward || '_'}\n`;
+  content += `P&L: ${normalizedPnl}\n`;
+  content += `P&L %: ${normalizedPnlPercentage}%\n`;
+  content += `Plan Status: ${normalizedPlanStatus}\n`;
+  content += `Emotional State: ${normalizedEmotionalState}\n`;
+  content += `SETUP IMAGE: ${hasSetupImage ? '[Image Attached]' : '[No Image]'}\n`;
+  content += `EXECUTION TF IMAGE: ${hasExecutionImage ? '[Image Attached]' : '[No Image]'}\n`;
+  content += `ADDITIONAL IMAGES: ${normalizedAdditionalImages}\n\n`;
+
+  content += '### Pair:\n';
 
   PAIRS.forEach((pair) => {
-    content += `- [${selectedPair === pair ? 'x' : ' '}] ${pair}\n`;
+    content += `- [${normalizedPair.toUpperCase() === pair ? 'x' : ' '}] ${pair}\n`;
   });
 
   content += '\nTrade:\n';
@@ -268,6 +354,34 @@ export const formatMoney = (value) => {
   return `${number >= 0 ? '+' : '-'}$${Math.abs(number).toFixed(2)}`;
 };
 
+const parseNumericString = (value) => {
+  if (value == null) {
+    return null;
+  }
+
+  const cleaned = String(value).replace(/[$,%\s,]/g, '').trim();
+  if (!cleaned || cleaned === '_') {
+    return null;
+  }
+
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+export const getPnlValue = (entry) => {
+  if (!entry) {
+    return null;
+  }
+
+  const directPnl = parseNumericString(entry.pnl);
+  if (directPnl !== null) {
+    return directPnl;
+  }
+
+  const parsedContent = parseManualEntryContent(entry.content || '');
+  return parseNumericString(parsedContent.pnl);
+};
+
 export const getPnlPercentageValue = (entry) => {
   if (!entry) {
     return null;
@@ -278,13 +392,19 @@ export const getPnlPercentageValue = (entry) => {
     entry.pnl_percentage !== undefined &&
     entry.pnl_percentage !== ''
   ) {
-    const stored = Number(entry.pnl_percentage);
-    if (Number.isFinite(stored)) {
+    const stored = parseNumericString(entry.pnl_percentage);
+    if (stored !== null) {
       return stored;
     }
   }
 
-  const pnl = Number(entry.pnl);
+  const parsedContent = parseManualEntryContent(entry.content || '');
+  const labeledPercentage = parseNumericString(parsedContent.pnlPercentage);
+  if (labeledPercentage !== null) {
+    return labeledPercentage;
+  }
+
+  const pnl = getPnlValue(entry);
   const balance = Number(entry.balance);
 
   if (!Number.isFinite(pnl) || !Number.isFinite(balance)) {

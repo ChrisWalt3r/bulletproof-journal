@@ -45,7 +45,7 @@ const navItems = [
     match: (pathname) => pathname.startsWith('/execution-review'),
   },
   {
-    label: 'Equity Curves',
+    label: 'Equity Curve',
     to: '/account-growth',
     icon: IoBarChartOutline,
     match: (pathname) => pathname.startsWith('/account-growth'),

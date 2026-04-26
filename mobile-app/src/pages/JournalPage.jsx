@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
+  IoAdd,
   IoRefresh,
   IoSearch,
   IoSettingsOutline,
@@ -211,14 +212,23 @@ export default function JournalPage() {
           </div>
         }
         actions={
-          <div className="button-row">
+          <div className="button-row journal-header-actions">
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => navigate('/journal/new')}
+            >
+              <IoAdd size={18} />
+              Add Manual Trade Entry
+            </button>
             <button
               type="button"
               className="secondary-button"
+              title="Reload latest manual and MT5 entries"
               onClick={() => loadEntries(1, deferredSearch, true)}
             >
               <IoRefresh size={18} />
-              Refresh
+              {loading ? 'Refreshing...' : 'Refresh Entries'}
             </button>
           </div>
         }
@@ -293,7 +303,17 @@ export default function JournalPage() {
         ) : (
           <EmptyState
             title="No entries yet"
-            description="Trades imported from your MT5 expert adviser will appear here automatically."
+            description="Trades imported from MT5 and manual entries will appear here."
+            action={
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => navigate('/journal/new')}
+              >
+                <IoAdd size={18} />
+                Add Manual Trade Entry
+              </button>
+            }
           />
         )}
       </section>

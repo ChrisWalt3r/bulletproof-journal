@@ -360,11 +360,12 @@ void SendSyncDeal(ulong deal_ticket, string action)
    int serverGmtOffset = (int)(TimeCurrent() - TimeGMT());
    datetime dealTimeUTC = dealTimeServer - serverGmtOffset;
 
-   // SL/TP may not be available for closed positions — try anyway
-   double sl = 0, tp = 0;
-   if(PositionSelectByTicket(positionId)) {
-      sl = PositionGetDouble(POSITION_SL);
-      tp = PositionGetDouble(POSITION_TP);
+   // Collect SL/TP from history first (works for synced historical deals), then fallback to open position
+   double sl = HistoryDealGetDouble(deal_ticket, DEAL_SL);
+   double tp = HistoryDealGetDouble(deal_ticket, DEAL_TP);
+   if((sl == 0.0 || tp == 0.0) && PositionSelectByTicket(positionId)) {
+      if(sl == 0.0) sl = PositionGetDouble(POSITION_SL);
+      if(tp == 0.0) tp = PositionGetDouble(POSITION_TP);
    }
 
    int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
@@ -542,11 +543,13 @@ void CaptureAndSend(ulong deal_ticket, string action)
    int serverGmtOffset = (int)(TimeCurrent() - TimeGMT());
    datetime dealTimeUTC = dealTimeServer - serverGmtOffset;
 
-   // Get SL/TP from the open position (only available while position is open)
-   double sl = 0, tp = 0;
-   if(PositionSelectByTicket(positionId)) {
-      sl = PositionGetDouble(POSITION_SL);
-      tp = PositionGetDouble(POSITION_TP);
+   // Collect SL/TP from history first, then fallback to open position.
+   // This keeps RR data available even when processing exits or catch-up sync.
+   double sl = HistoryDealGetDouble(deal_ticket, DEAL_SL);
+   double tp = HistoryDealGetDouble(deal_ticket, DEAL_TP);
+   if((sl == 0.0 || tp == 0.0) && PositionSelectByTicket(positionId)) {
+      if(sl == 0.0) sl = PositionGetDouble(POSITION_SL);
+      if(tp == 0.0) tp = PositionGetDouble(POSITION_TP);
    }
 
    // 2. Take screenshot of the CORRECT chart for this symbol

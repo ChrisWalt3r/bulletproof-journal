@@ -1,7 +1,7 @@
 import { parseBackendTimestamp } from './dateUtils.js';
 
 const TRADE_DATE_REGEX =
-  /^Date:\s*([A-Za-z]+),\s*([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})/m;
+  /^Date:\s*[A-Za-z]+,\s*([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})(?:,?\s*(?:at\s*)?(\d{1,2}):(\d{2}))?/im;
 
 const MONTH_INDEX = {
   January: 0,
@@ -28,19 +28,26 @@ export const extractTradeDateFromContent = (content) => {
     return null;
   }
 
-  const monthIndex = MONTH_INDEX[match[2]];
+  const monthIndex = MONTH_INDEX[match[1]];
   if (monthIndex === undefined) {
     return null;
   }
 
-  const day = Number(match[3]);
-  const year = Number(match[4]);
+  const day = Number(match[2]);
+  const year = Number(match[3]);
+  const hour = match[4] != null ? Number(match[4]) : 0;
+  const minute = match[5] != null ? Number(match[5]) : 0;
 
-  if (Number.isNaN(day) || Number.isNaN(year)) {
+  if (
+    Number.isNaN(day) ||
+    Number.isNaN(year) ||
+    Number.isNaN(hour) ||
+    Number.isNaN(minute)
+  ) {
     return null;
   }
 
-  return new Date(Date.UTC(year, monthIndex, day));
+  return new Date(Date.UTC(year, monthIndex, day, hour, minute));
 };
 
 export const getEntryTradeDate = (entry) => {

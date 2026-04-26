@@ -17,11 +17,13 @@ import EmptyState from '../components/EmptyState.jsx';
 import { useAccount } from '../context/AccountContext.jsx';
 import { imageAPI, journalAPI } from '../services/api.js';
 import { formatKampalaDate, formatKampalaTime } from '../utils/dateUtils.js';
+import { getEntryTradeDate } from '../utils/tradeDates.js';
 import {
   buildManualEntryContent,
   formatPnlPercentage,
   getEntryOutcome,
   getEntryPair,
+  getPnlValue,
   getPnlPercentageValue,
   getPlanStatusLabel,
   getResultColor,
@@ -51,6 +53,17 @@ const revokeAsset = (asset) => {
   }
 };
 
+const formatForDateTimeInput = (value) => {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const offset = date.getTimezoneOffset();
+  const local = new Date(date.getTime() - offset * 60 * 1000);
+  return local.toISOString().slice(0, 16);
+};
+
 export default function EntryDetailPage() {
   const navigate = useNavigate();
   const { entryId } = useParams();
@@ -65,6 +78,9 @@ export default function EntryDetailPage() {
   const [tradeDirection, setTradeDirection] = useState('');
   const [tradeResult, setTradeResult] = useState('');
   const [riskReward, setRiskReward] = useState('');
+  const [pnl, setPnl] = useState('');
+  const [pnlPercentage, setPnlPercentage] = useState('');
+  const [tradeDateTime, setTradeDateTime] = useState('');
   const [notes, setNotes] = useState('');
   const [isFollowingPlan, setIsFollowingPlan] = useState(false);
   const [emotionalState, setEmotionalState] = useState('');
@@ -118,11 +134,24 @@ export default function EntryDetailPage() {
     setTradeDirection(nextEntry?.direction || parsedContent.tradeDirection || '');
     setTradeResult(inferredResult || '');
     setRiskReward(getRiskRewardValue(nextEntry) || '');
+    setPnl(
+      Number.isFinite(getPnlValue(nextEntry))
+        ? String(getPnlValue(nextEntry))
+        : parsedContent.pnl || ''
+    );
+    setPnlPercentage(
+      Number.isFinite(getPnlPercentageValue(nextEntry))
+        ? String(getPnlPercentageValue(nextEntry))
+        : parsedContent.pnlPercentage || ''
+    );
+    setTradeDateTime(
+      formatForDateTimeInput(getEntryTradeDate(nextEntry)?.toISOString() || nextEntry?.created_at)
+    );
     setNotes(nextEntry?.notes || parsedContent.notes || '');
     setIsFollowingPlan(
       nextEntry?.following_plan === true || nextEntry?.following_plan === 'true'
     );
-    setEmotionalState(nextEntry?.emotional_state || '');
+    setEmotionalState(nextEntry?.emotional_state || parsedContent.emotionalState || '');
     setSetupAsset(
       nextEntry?.before_image_url || nextEntry?.image_url
         ? createExistingAsset(nextEntry.before_image_url || nextEntry.image_url)
@@ -143,15 +172,23 @@ export default function EntryDetailPage() {
   const detailCards = useMemo(
     () => [
       { label: 'Pair', value: selectedPair || getEntryPair(entry) },
+      {
+        label: 'Trade Date & Time',
+        value: `${formatKampalaDate(getEntryTradeDate(entry) || entry?.created_at)} ${formatKampalaTime(
+          getEntryTradeDate(entry) || entry?.created_at
+        )}`,
+      },
       { label: 'Direction', value: tradeDirection || entry?.direction || 'N/A' },
       { label: 'Outcome', value: tradeResult || getEntryOutcome(entry) },
       { label: 'Risk : Reward', value: riskReward || 'N/A' },
       {
         label: 'P&L',
-        value:
-          entry?.pnl != null
-            ? `${Number(entry.pnl) >= 0 ? '+' : ''}$${Number(entry.pnl).toFixed(2)}`
-            : 'N/A',
+        value: (() => {
+          const pnlValue = getPnlValue(entry);
+          return Number.isFinite(pnlValue)
+            ? `${pnlValue >= 0 ? '+' : ''}$${Math.abs(pnlValue).toFixed(2)}`
+            : 'N/A';
+        })(),
       },
       {
         label: 'P&L %',
@@ -216,6 +253,28 @@ export default function EntryDetailPage() {
         window.alert('Pair, direction, and result are required for manual entries.');
         return;
       }
+
+      if (!riskReward?.trim()) {
+        window.alert('Risk : Reward is required for manual entries.');
+        return;
+      }
+
+      const parsedPnl = Number(pnl);
+      if (!Number.isFinite(parsedPnl)) {
+        window.alert('Please provide a valid P&L value.');
+        return;
+      }
+
+      const parsedPnlPercentage = Number(pnlPercentage);
+      if (!Number.isFinite(parsedPnlPercentage)) {
+        window.alert('Please provide a valid P&L % value.');
+        return;
+      }
+
+      if (!tradeDateTime.trim() || Number.isNaN(new Date(tradeDateTime).getTime())) {
+        window.alert('Trade date and time are required for manual entries.');
+        return;
+      }
     }
 
     setIsSaving(true);
@@ -271,19 +330,29 @@ export default function EntryDetailPage() {
               tradeDirection,
               tradeResult,
               riskReward,
+              pnl,
+              pnlPercentage,
+              tradeDateTime,
+              emotionalState,
               notes,
               hasSetupImage: Boolean(setupAsset),
+              hasExecutionImage: Boolean(executionAsset),
+              additionalImageCount: uploadedGallery.length,
             }),
         imageUrl,
         imageFilename,
         executionTfImageUrl,
         executionTfImageFilename,
         accountId: currentAccount?.id || entry.account_id,
+        symbol: selectedPair,
+        direction: tradeDirection,
+        pnl: !entry.mt5_ticket ? Number(pnl) : undefined,
         followingPlan: isFollowingPlan,
         emotionalState,
         notes,
-        pnlPercentage: getPnlPercentageValue(entry),
+        pnlPercentage: !entry.mt5_ticket ? Number(pnlPercentage) : getPnlPercentageValue(entry),
         galleryImages: uploadedGallery,
+        createdAt: !entry.mt5_ticket ? new Date(tradeDateTime).toISOString() : undefined,
         clearImage,
         clearExecutionTfImage,
       });
@@ -413,7 +482,7 @@ export default function EntryDetailPage() {
         <article className="surface-card detail-card">
           <div className="section-heading">
             <div>
-              <span className="section-heading__eyebrow">Setup Analysis</span>
+              <span className="section-heading__eyebrow">Primary Image</span>
               <h2>Primary image</h2>
             </div>
           </div>
@@ -425,13 +494,13 @@ export default function EntryDetailPage() {
                 className="image-preview-trigger"
                 onClick={() => openImagePreview(primaryImage, 'Primary image', 'setup')}
               >
-                <img src={primaryImage} alt="Setup analysis" />
+                <img src={primaryImage} alt="Primary trade image" />
               </button>
             </div>
           ) : (
             <EmptyState
               title="No setup image"
-              description="Upload one while editing if you want the setup analysis visible here."
+              description="Upload one while editing so this entry has a primary trade image."
             />
           )}
 
@@ -495,19 +564,6 @@ export default function EntryDetailPage() {
 
           {isEditing && !entry.mt5_ticket ? (
             <div className="stack-lg">
-              <div className="chip-grid">
-                {PAIRS.map((pair) => (
-                  <button
-                    key={pair}
-                    type="button"
-                    className={`choice-chip ${selectedPair === pair ? 'is-selected' : ''}`}
-                    onClick={() => setSelectedPair(pair)}
-                  >
-                    {pair}
-                  </button>
-                ))}
-              </div>
-
               <div className="segmented-grid">
                 {TRADE_DIRECTIONS.map((direction) => (
                   <button
@@ -524,12 +580,67 @@ export default function EntryDetailPage() {
               </div>
 
               <label className="field">
+                <span>Trade Date &amp; Time</span>
+                <input
+                  type="datetime-local"
+                  value={tradeDateTime}
+                  onChange={(event) => setTradeDateTime(event.target.value)}
+                  required
+                />
+              </label>
+
+              <label className="field">
+                <span>Pair / Asset</span>
+                <input
+                  type="text"
+                  value={selectedPair}
+                  onChange={(event) => setSelectedPair(event.target.value.toUpperCase())}
+                  placeholder="EURUSD, XAUUSD, BTCUSD, NAS100..."
+                />
+              </label>
+
+              <div className="chip-grid">
+                {PAIRS.map((pair) => (
+                  <button
+                    key={pair}
+                    type="button"
+                    className={`choice-chip ${selectedPair === pair ? 'is-selected' : ''}`}
+                    onClick={() => setSelectedPair(pair)}
+                  >
+                    {pair}
+                  </button>
+                ))}
+              </div>
+
+              <label className="field">
                 <span>Risk : Reward Ratio</span>
                 <input
                   type="text"
                   value={riskReward}
                   onChange={(event) => setRiskReward(event.target.value)}
                   placeholder="2.5"
+                />
+              </label>
+
+              <label className="field">
+                <span>P&amp;L</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={pnl}
+                  onChange={(event) => setPnl(event.target.value)}
+                  placeholder="125.50"
+                />
+              </label>
+
+              <label className="field">
+                <span>P&amp;L %</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={pnlPercentage}
+                  onChange={(event) => setPnlPercentage(event.target.value)}
+                  placeholder="2.35"
                 />
               </label>
 
@@ -797,15 +908,6 @@ export default function EntryDetailPage() {
           />
         </article>
 
-        <article className="surface-card detail-card detail-card--full">
-          <div className="section-heading">
-            <div>
-              <span className="section-heading__eyebrow">Raw Content</span>
-              <h2>Stored journal body</h2>
-            </div>
-          </div>
-          <pre className="content-preview">{entry.content || 'No content available.'}</pre>
-        </article>
       </section>
 
       {isEditing ? (

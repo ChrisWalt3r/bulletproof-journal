@@ -6,9 +6,22 @@ const storageService = require('../services/storage');
 
 const router = express.Router();
 
+function parseMt5Number(value, fallback = null) {
+    if (value === null || value === undefined || value === '') {
+        return fallback;
+    }
+
+    const parsed = Number(String(value).replace(/,/g, '').trim());
+    if (!Number.isFinite(parsed)) {
+        return fallback;
+    }
+
+    return parsed;
+}
+
 function calculatePnlPercentage(pnl, balance) {
-    const realizedPnl = Number(pnl);
-    const endingBalance = Number(balance);
+    const realizedPnl = parseMt5Number(pnl, null);
+    const endingBalance = parseMt5Number(balance, null);
 
     if (!Number.isFinite(realizedPnl) || !Number.isFinite(endingBalance)) {
         return null;
@@ -209,6 +222,15 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
 
         const imageFile = req.file;
 
+        const normalizedPrice = parseMt5Number(price, null);
+        const normalizedSl = parseMt5Number(sl, null);
+        const normalizedTp = parseMt5Number(tp, null);
+        const normalizedVolume = parseMt5Number(volume, null);
+        const normalizedProfit = parseMt5Number(profit, 0);
+        const normalizedCommission = parseMt5Number(commission, 0);
+        const normalizedSwap = parseMt5Number(swap, 0);
+        const normalizedBalance = parseMt5Number(balance, null);
+
         if (!ticket || !action) {
             return res.status(400).json({ error: 'Missing required fields: ticket or action' });
         }
@@ -304,7 +326,7 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
             }
 
             const title = `MT5: ${type} ${symbol}`;
-            const content = `Automated Entry: ${type} ${symbol} @ ${price}`;
+            const content = `Automated Entry: ${type} ${symbol} @ ${normalizedPrice ?? price}`;
             const assetType = classifyAsset(symbol);
 
             if (existing?.id) {
@@ -323,9 +345,9 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                 `, [
                     title,
                     imageUrl,
-                    price,
-                    sl || null,
-                    tp || null,
+                    normalizedPrice,
+                    normalizedSl,
+                    normalizedTp,
                     positionId || null,
                     existing.id,
                     assetType,
@@ -353,10 +375,10 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                 positionId || ticket,
                 symbol,
                 type,
-                volume,
-                price,
-                sl || null,
-                tp || null,
+                normalizedVolume,
+                normalizedPrice,
+                normalizedSl,
+                normalizedTp,
                 imageUrl,
                 assetType,
                 null,
@@ -366,8 +388,8 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
             res.status(201).json({ success: true, message: 'Trade entry recorded', entryId: result.rows[0].id, accountId });
 
         } else if (action === 'EXIT') {
-            const totalPnL = parseFloat(profit || 0) + parseFloat(commission || 0) + parseFloat(swap || 0);
-            const pnlPercentage = calculatePnlPercentage(totalPnL, balance);
+            const totalPnL = normalizedProfit + normalizedCommission + normalizedSwap;
+            const pnlPercentage = calculatePnlPercentage(totalPnL, normalizedBalance);
 
             // Parse deal time from MT5 for orphaned exits
             let exitTimestamp = new Date();
@@ -415,12 +437,12 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                         symbol,
                         type,
                         imageUrl,
-                        price,
+                        normalizedPrice,
                         totalPnL,
                         pnlPercentage,
-                        commission || 0,
-                        swap || 0,
-                        balance || 0,
+                        normalizedCommission,
+                        normalizedSwap,
+                        normalizedBalance,
                         assetType,
                         null,
                         ticket,
@@ -445,12 +467,12 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                     WHERE id = $9
                 `, [
                     imageUrl,
-                    price,
+                    normalizedPrice,
                     totalPnL,
                     pnlPercentage,
-                    commission || 0,
-                    swap || 0,
-                    balance || 0,
+                    normalizedCommission,
+                    normalizedSwap,
+                    normalizedBalance,
                     positionId || null,
                     fallback.id,
                     ticket
@@ -474,12 +496,12 @@ router.post('/webhook', verifyWebhookSecret, upload.single('image'), async (req,
                 WHERE id = $8
             `, [
                 imageUrl,
-                price,
+                normalizedPrice,
                 totalPnL,
                 pnlPercentage,
-                commission || 0,
-                swap || 0,
-                balance || 0,
+                normalizedCommission,
+                normalizedSwap,
+                normalizedBalance,
                 existing.id,
                 ticket
             ]);

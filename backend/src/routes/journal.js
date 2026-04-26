@@ -170,7 +170,10 @@ router.post('/', async (req, res) => {
       imageUrl, imageFilename, accountId, reasonMindset,
       createdAt, isPlanCompliant, planNotes,
       followingPlan, emotionalState, notes,
-      executionTfImageUrl, executionTfImageFilename, pnlPercentage
+      executionTfImageUrl, executionTfImageFilename,
+      pnl, pnlPercentage,
+      symbol, direction, assetType,
+      galleryImages
     } = req.body;
 
     if (!title || !content) {
@@ -200,15 +203,20 @@ router.post('/', async (req, res) => {
         ? storageService.getPublicUrl(executionTfImageFilename)
         : null);
 
+    const normalizedFollowingPlan =
+      followingPlan === undefined ? null : followingPlan;
+
     const result = await runQuery(
       `INSERT INTO journal_entries (
         title, content, mood_rating, tags, is_private, 
         image_url, image_filename, execution_tf_image_url, execution_tf_image_filename, account_id, reason_mindset, 
         is_plan_compliant, plan_notes,
-        following_plan, emotional_state, notes, pnl_percentage,
+        symbol, direction, asset_type,
+        following_plan, emotional_state, notes,
+        pnl, pnl_percentage, gallery_images,
         created_at, updated_at
        )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $18)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $23)
        RETURNING *`,
       [
         title,
@@ -222,12 +230,17 @@ router.post('/', async (req, res) => {
         executionTfImageFilename || null,
         resolvedAccountId,
         reasonMindset || null,
-        isPlanCompliant || false,
+        isPlanCompliant != null ? Boolean(isPlanCompliant) : false,
         planNotes || null,
-        followingPlan || false,
+        symbol || null,
+        direction || null,
+        assetType || 'other',
+        normalizedFollowingPlan,
         emotionalState || null,
         notes || null,
+        pnl != null ? Number(pnl) : null,
         pnlPercentage != null ? Number(pnlPercentage) : null,
+        galleryImages ? JSON.stringify(galleryImages) : JSON.stringify([]),
         timestamp
       ]
     );
@@ -262,7 +275,9 @@ router.put('/:id', async (req, res) => {
       imageUrl, imageFilename, accountId, reasonMindset,
       isPlanCompliant, planNotes, followingPlan, emotionalState, notes,
       executionTfImageUrl, executionTfImageFilename,
-      pnlPercentage,
+      pnl, pnlPercentage,
+      symbol, direction,
+      createdAt,
       galleryImages,
       clearImage,
       clearExecutionTfImage
@@ -291,6 +306,18 @@ router.put('/:id', async (req, res) => {
           (executionTfImageFilename
             ? storageService.getPublicUrl(executionTfImageFilename)
             : null);
+    const normalizedCreatedAt = (() => {
+      if (!createdAt) {
+        return null;
+      }
+
+      const parsed = new Date(createdAt);
+      if (Number.isNaN(parsed.getTime())) {
+        return null;
+      }
+
+      return parsed.toISOString();
+    })();
 
     const result = await runQuery(
       `UPDATE journal_entries 
@@ -312,8 +339,12 @@ router.put('/:id', async (req, res) => {
            notes = COALESCE($16, notes),
            gallery_images = COALESCE($17, gallery_images),
            pnl_percentage = COALESCE($18, pnl_percentage),
+           symbol = COALESCE($21, symbol),
+           direction = COALESCE($22, direction),
+           pnl = COALESCE($23, pnl),
+           created_at = COALESCE($24, created_at),
            updated_at = NOW()
-         WHERE id = $21
+         WHERE id = $25
        RETURNING *`,
       [
         title || null,
@@ -336,6 +367,10 @@ router.put('/:id', async (req, res) => {
         pnlPercentage != null ? Number(pnlPercentage) : null,
         clearImage === true,
         clearExecutionTfImage === true,
+        symbol || null,
+        direction || null,
+        pnl != null ? Number(pnl) : null,
+        normalizedCreatedAt,
         id
       ]
     );
