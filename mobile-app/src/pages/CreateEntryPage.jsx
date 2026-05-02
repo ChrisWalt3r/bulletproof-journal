@@ -78,6 +78,8 @@ export default function CreateEntryPage() {
 
   const [setupFile, setSetupFile] = useState(null);
   const [setupPreview, setSetupPreview] = useState('');
+  const [setupAfterFile, setSetupAfterFile] = useState(null);
+  const [setupAfterPreview, setSetupAfterPreview] = useState('');
   const [executionFile, setExecutionFile] = useState(null);
   const [executionPreview, setExecutionPreview] = useState('');
   const [additionalAssets, setAdditionalAssets] = useState([]);
@@ -87,6 +89,8 @@ export default function CreateEntryPage() {
 
   const setupGalleryInputRef = useRef(null);
   const setupCameraInputRef = useRef(null);
+  const setupAfterGalleryInputRef = useRef(null);
+  const setupAfterCameraInputRef = useRef(null);
   const executionGalleryInputRef = useRef(null);
   const executionCameraInputRef = useRef(null);
   const additionalGalleryInputRef = useRef(null);
@@ -117,6 +121,17 @@ export default function CreateEntryPage() {
 
     setSetupFile(file);
     setSetupPreview(URL.createObjectURL(file));
+  };
+
+  const handleSetupAfterImage = (file) => {
+    if (!file) return;
+
+    if (setupAfterPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(setupAfterPreview);
+    }
+
+    setSetupAfterFile(file);
+    setSetupAfterPreview(URL.createObjectURL(file));
   };
 
   const handleExecutionImage = (file) => {
@@ -212,7 +227,12 @@ export default function CreateEntryPage() {
     }
 
     if (!setupFile) {
-      window.alert('Please upload a primary setup image.');
+      window.alert('Please upload a primary setup image (before).');
+      return;
+    }
+
+    if (!setupAfterFile) {
+      window.alert('Please upload a primary setup image (after).');
       return;
     }
 
@@ -230,6 +250,7 @@ export default function CreateEntryPage() {
 
       setIsUploading(true);
       const setupUpload = await imageAPI.uploadImage(setupFile);
+      const setupAfterUpload = await imageAPI.uploadImage(setupAfterFile);
       const executionUpload = await imageAPI.uploadImage(executionFile);
       const uploadedAdditionalImages = [];
       for (const asset of additionalAssets) {
@@ -271,8 +292,10 @@ export default function CreateEntryPage() {
           tradeResult.toLowerCase(),
           normalizedPair.toLowerCase(),
         ],
-        imageUrl: setupUpload.imageUrl,
-        imageFilename: setupUpload.filename,
+        beforeImageUrl: setupUpload.imageUrl,
+        beforeImageFilename: setupUpload.filename,
+        afterImageUrl: setupAfterUpload.imageUrl,
+        afterImageFilename: setupAfterUpload.filename,
         executionTfImageUrl: executionUpload.imageUrl,
         executionTfImageFilename: executionUpload.filename,
         galleryImages: uploadedAdditionalImages,
@@ -420,6 +443,57 @@ export default function CreateEntryPage() {
             hidden
             onChange={(event) => handleSetupImage(event.target.files?.[0])}
           />
+
+          <input
+            ref={setupAfterGalleryInputRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(event) => handleSetupAfterImage(event.target.files?.[0])}
+          />
+          <input
+            ref={setupAfterCameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            hidden
+            onChange={(event) => handleSetupAfterImage(event.target.files?.[0])}
+          />
+
+          {setupAfterPreview ? (
+            <div className="image-preview-card" style={{ marginTop: 12 }}>
+              <button
+                type="button"
+                className="image-preview-trigger"
+                onClick={() => setExpandedImage(setupAfterPreview)}
+              >
+                <img src={setupAfterPreview} alt="Selected setup (after)" />
+              </button>
+              <div className="button-row">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setupAfterGalleryInputRef.current?.click()}
+                >
+                  <IoCloudUploadOutline size={18} />
+                  Replace
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => {
+                    if (setupAfterPreview.startsWith('blob:')) {
+                      URL.revokeObjectURL(setupAfterPreview);
+                    }
+                    setSetupAfterFile(null);
+                    setSetupAfterPreview('');
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ) : null}
 
         </article>
 

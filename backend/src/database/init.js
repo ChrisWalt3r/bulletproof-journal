@@ -177,6 +177,9 @@ const runLiveMigrations = async () => {
     // Add execution timeframe image columns
     `ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS execution_tf_image_url TEXT`,
     `ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS execution_tf_image_filename TEXT`,
+    // Add before/after image filename columns so server uploads can store filenames
+    `ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS before_image_filename TEXT`,
+    `ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS after_image_filename TEXT`,
     // Add stored percentage return per trade
     `ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS pnl_percentage DECIMAL`,
     // Backfill pnl percentage where we have both current balance and realized pnl

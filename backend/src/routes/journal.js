@@ -5,21 +5,32 @@ const storageService = require('../services/storage');
 const router = express.Router();
 
 const normalizeEntryImages = (entry) => {
-  if (!entry) {
-    return entry;
-  }
+  if (!entry) return entry;
 
-  return {
-    ...entry,
-    image_url:
-      entry.image_url ||
-      (entry.image_filename ? storageService.getPublicUrl(entry.image_filename) : null),
-    execution_tf_image_url:
-      entry.execution_tf_image_url ||
-      (entry.execution_tf_image_filename
-        ? storageService.getPublicUrl(entry.execution_tf_image_filename)
-        : null),
-  };
+  const normalized = { ...entry };
+
+  // Main image (legacy: image_url or image_filename)
+  normalized.image_url =
+    entry.image_url ||
+    (entry.image_filename ? storageService.getPublicUrl(entry.image_filename) : null);
+
+  // Execution timeframe image
+  normalized.execution_tf_image_url =
+    entry.execution_tf_image_url ||
+    (entry.execution_tf_image_filename
+      ? storageService.getPublicUrl(entry.execution_tf_image_filename)
+      : null);
+
+  // Before / After primary setup images (support either direct URL or stored filename)
+  normalized.before_image_url =
+    entry.before_image_url ||
+    (entry.before_image_filename ? storageService.getPublicUrl(entry.before_image_filename) : null);
+
+  normalized.after_image_url =
+    entry.after_image_url ||
+    (entry.after_image_filename ? storageService.getPublicUrl(entry.after_image_filename) : null);
+
+  return normalized;
 };
 
 // Get all journal entries (user-scoped via accounts)
@@ -166,66 +177,79 @@ router.post('/', async (req, res) => {
   try {
     const authId = req.user.id;
     const {
-      title, content, moodRating, tags = [], isPrivate = true,
-      imageUrl, imageFilename, accountId, reasonMindset,
-      createdAt, isPlanCompliant, planNotes,
-      followingPlan, emotionalState, notes,
-      executionTfImageUrl, executionTfImageFilename,
-      pnl, pnlPercentage,
-      symbol, direction, assetType,
-      galleryImages
+      title,
+      content,
+      moodRating,
+      tags = [],
+      isPrivate = true,
+      imageUrl,
+      imageFilename,
+      beforeImageUrl,
+      beforeImageFilename,
+      afterImageUrl,
+      afterImageFilename,
+      accountId,
+      reasonMindset,
+      createdAt,
+      isPlanCompliant,
+      planNotes,
+      followingPlan,
+      emotionalState,
+      notes,
+      executionTfImageUrl,
+      executionTfImageFilename,
+      pnl,
+      pnlPercentage,
+      symbol,
+      direction,
+      assetType,
+      galleryImages,
     } = req.body;
 
     if (!title || !content) {
-      return res.status(400).json({
-        error: 'Missing required fields',
-        message: 'Title and content are required'
-      });
+      return res.status(400).json({ error: 'Missing required fields', message: 'Title and content are required' });
     }
 
-    // Verify the account belongs to this user
     const resolvedAccountId = accountId || null;
     if (resolvedAccountId) {
       const ownerCheck = await getRow('SELECT id FROM accounts WHERE id = $1 AND auth_id = $2', [resolvedAccountId, authId]);
-      if (!ownerCheck) {
-        return res.status(403).json({ error: 'Forbidden', message: 'Account does not belong to you' });
-      }
+      if (!ownerCheck) return res.status(403).json({ error: 'Forbidden', message: 'Account does not belong to you' });
     }
 
-    // Timestamp logic (Postgres handles timezone, but we can store explicit UTC if provided)
-    const timestamp = createdAt || new Date().toISOString(); // Simplified for now, Postgres accepts ISO string
+    const timestamp = createdAt || new Date().toISOString();
 
-    const normalizedImageUrl =
-      imageUrl || (imageFilename ? storageService.getPublicUrl(imageFilename) : null);
-    const normalizedExecutionTfImageUrl =
-      executionTfImageUrl ||
-      (executionTfImageFilename
-        ? storageService.getPublicUrl(executionTfImageFilename)
-        : null);
+    const normalizedImageUrl = imageUrl || (imageFilename ? storageService.getPublicUrl(imageFilename) : null);
+    const normalizedExecutionTfImageUrl = executionTfImageUrl || (executionTfImageFilename ? storageService.getPublicUrl(executionTfImageFilename) : null);
+    const normalizedBeforeImageUrl = beforeImageUrl || (beforeImageFilename ? storageService.getPublicUrl(beforeImageFilename) : null);
+    const normalizedAfterImageUrl = afterImageUrl || (afterImageFilename ? storageService.getPublicUrl(afterImageFilename) : null);
 
-    const normalizedFollowingPlan =
-      followingPlan === undefined ? null : followingPlan;
+    const normalizedFollowingPlan = followingPlan === undefined ? null : followingPlan;
 
     const result = await runQuery(
       `INSERT INTO journal_entries (
-        title, content, mood_rating, tags, is_private, 
-        image_url, image_filename, execution_tf_image_url, execution_tf_image_filename, account_id, reason_mindset, 
-        is_plan_compliant, plan_notes,
-        symbol, direction, asset_type,
-        following_plan, emotional_state, notes,
-        pnl, pnl_percentage, gallery_images,
-        created_at, updated_at
-       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $23)
-       RETURNING *`,
+        title, content, mood_rating, tags, is_private,
+        image_url, image_filename,
+        before_image_url, before_image_filename,
+        after_image_url, after_image_filename,
+        execution_tf_image_url, execution_tf_image_filename,
+        account_id, reason_mindset, is_plan_compliant, plan_notes,
+        symbol, direction, asset_type, following_plan, emotional_state, notes,
+        pnl, pnl_percentage, gallery_images, created_at, updated_at
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27
+      ) RETURNING *`,
       [
         title,
         content,
         moodRating || null,
-        JSON.stringify(tags), // JSONB accepts string or object, but stringify is safer
+        JSON.stringify(tags),
         isPrivate,
         normalizedImageUrl,
         imageFilename || null,
+        normalizedBeforeImageUrl,
+        beforeImageFilename || null,
+        normalizedAfterImageUrl,
+        afterImageFilename || null,
         normalizedExecutionTfImageUrl,
         executionTfImageFilename || null,
         resolvedAccountId,
@@ -241,27 +265,16 @@ router.post('/', async (req, res) => {
         pnl != null ? Number(pnl) : null,
         pnlPercentage != null ? Number(pnlPercentage) : null,
         galleryImages ? JSON.stringify(galleryImages) : JSON.stringify([]),
-        timestamp
+        timestamp,
       ]
     );
 
     const newEntry = normalizeEntryImages(result.rows[0]);
 
-    res.status(201).json({
-      message: 'Journal entry created successfully',
-      entry: {
-        ...newEntry,
-        tags: newEntry.tags || [],
-        is_private: Boolean(newEntry.is_private)
-      }
-    });
-
+    res.status(201).json({ message: 'Journal entry created successfully', entry: { ...newEntry, tags: newEntry.tags || [], is_private: Boolean(newEntry.is_private) } });
   } catch (error) {
     console.error('Create entry error:', error);
-    res.status(500).json({
-      error: 'Failed to create entry',
-      message: 'An error occurred while creating the journal entry'
-    });
+    res.status(500).json({ error: 'Failed to create entry', message: 'An error occurred while creating the journal entry' });
   }
 });
 
@@ -271,81 +284,87 @@ router.put('/:id', async (req, res) => {
     const authId = req.user.id;
     const { id } = req.params;
     const {
-      title, content, moodRating, tags, isPrivate,
-      imageUrl, imageFilename, accountId, reasonMindset,
-      isPlanCompliant, planNotes, followingPlan, emotionalState, notes,
-      executionTfImageUrl, executionTfImageFilename,
-      pnl, pnlPercentage,
-      symbol, direction,
+      title,
+      content,
+      moodRating,
+      tags,
+      isPrivate,
+      imageUrl,
+      imageFilename,
+      beforeImageUrl,
+      beforeImageFilename,
+      afterImageUrl,
+      afterImageFilename,
+      accountId,
+      reasonMindset,
+      isPlanCompliant,
+      planNotes,
+      followingPlan,
+      emotionalState,
+      notes,
+      executionTfImageUrl,
+      executionTfImageFilename,
+      pnl,
+      pnlPercentage,
+      symbol,
+      direction,
       createdAt,
       galleryImages,
       clearImage,
-      clearExecutionTfImage
+      clearExecutionTfImage,
+      clearBeforeImage,
+      clearAfterImage,
     } = req.body;
 
-    // Verify entry belongs to this user's accounts
     const existingEntry = await getRow(
-      `SELECT je.id FROM journal_entries je
-       JOIN accounts a ON je.account_id = a.id
-       WHERE je.id = $1 AND a.auth_id = $2`,
+      `SELECT je.id FROM journal_entries je JOIN accounts a ON je.account_id = a.id WHERE je.id = $1 AND a.auth_id = $2`,
       [id, authId]
     );
 
-    if (!existingEntry) {
-      return res.status(404).json({ error: 'Entry not found' });
-    }
+    if (!existingEntry) return res.status(404).json({ error: 'Entry not found' });
 
-    const normalizedImageUrl =
-      clearImage === true
-        ? null
-        : imageUrl || (imageFilename ? storageService.getPublicUrl(imageFilename) : null);
-    const normalizedExecutionTfImageUrl =
-      clearExecutionTfImage === true
-        ? null
-        : executionTfImageUrl ||
-          (executionTfImageFilename
-            ? storageService.getPublicUrl(executionTfImageFilename)
-            : null);
+    const normalizedImageUrl = clearImage === true ? null : imageUrl || (imageFilename ? storageService.getPublicUrl(imageFilename) : null);
+    const normalizedExecutionTfImageUrl = clearExecutionTfImage === true ? null : executionTfImageUrl || (executionTfImageFilename ? storageService.getPublicUrl(executionTfImageFilename) : null);
+    const normalizedBeforeImageUrl = clearBeforeImage === true ? null : beforeImageUrl || (beforeImageFilename ? storageService.getPublicUrl(beforeImageFilename) : null);
+    const normalizedAfterImageUrl = clearAfterImage === true ? null : afterImageUrl || (afterImageFilename ? storageService.getPublicUrl(afterImageFilename) : null);
+
     const normalizedCreatedAt = (() => {
-      if (!createdAt) {
-        return null;
-      }
-
+      if (!createdAt) return null;
       const parsed = new Date(createdAt);
-      if (Number.isNaN(parsed.getTime())) {
-        return null;
-      }
-
+      if (Number.isNaN(parsed.getTime())) return null;
       return parsed.toISOString();
     })();
 
     const result = await runQuery(
-      `UPDATE journal_entries 
-       SET title = COALESCE($1, title),
-           content = COALESCE($2, content),
-           mood_rating = COALESCE($3, mood_rating),
-           tags = COALESCE($4, tags),
-           is_private = COALESCE($5, is_private),
-           image_url = CASE WHEN $19 THEN NULL ELSE COALESCE($6, image_url) END,
-           image_filename = CASE WHEN $19 THEN NULL ELSE COALESCE($7, image_filename) END,
-           execution_tf_image_url = CASE WHEN $20 THEN NULL ELSE COALESCE($8, execution_tf_image_url) END,
-           execution_tf_image_filename = CASE WHEN $20 THEN NULL ELSE COALESCE($9, execution_tf_image_filename) END,
-           account_id = COALESCE($10, account_id),
-           reason_mindset = COALESCE($11, reason_mindset),
-           is_plan_compliant = COALESCE($12, is_plan_compliant),
-           plan_notes = COALESCE($13, plan_notes),
-           following_plan = COALESCE($14, following_plan),
-           emotional_state = COALESCE($15, emotional_state),
-           notes = COALESCE($16, notes),
-           gallery_images = COALESCE($17, gallery_images),
-           pnl_percentage = COALESCE($18, pnl_percentage),
-           symbol = COALESCE($21, symbol),
-           direction = COALESCE($22, direction),
-           pnl = COALESCE($23, pnl),
-           created_at = COALESCE($24, created_at),
-           updated_at = NOW()
-         WHERE id = $25
-       RETURNING *`,
+      `UPDATE journal_entries SET
+         title = COALESCE($1, title),
+         content = COALESCE($2, content),
+         mood_rating = COALESCE($3, mood_rating),
+         tags = COALESCE($4, tags),
+         is_private = COALESCE($5, is_private),
+         image_url = CASE WHEN $19 THEN NULL ELSE COALESCE($6, image_url) END,
+         image_filename = CASE WHEN $19 THEN NULL ELSE COALESCE($7, image_filename) END,
+         before_image_url = CASE WHEN $23 THEN NULL ELSE COALESCE($21, before_image_url) END,
+         before_image_filename = CASE WHEN $23 THEN NULL ELSE COALESCE($22, before_image_filename) END,
+         after_image_url = CASE WHEN $26 THEN NULL ELSE COALESCE($24, after_image_url) END,
+         after_image_filename = CASE WHEN $26 THEN NULL ELSE COALESCE($25, after_image_filename) END,
+         execution_tf_image_url = CASE WHEN $20 THEN NULL ELSE COALESCE($8, execution_tf_image_url) END,
+         execution_tf_image_filename = CASE WHEN $20 THEN NULL ELSE COALESCE($9, execution_tf_image_filename) END,
+         account_id = COALESCE($10, account_id),
+         reason_mindset = COALESCE($11, reason_mindset),
+         is_plan_compliant = COALESCE($12, is_plan_compliant),
+         plan_notes = COALESCE($13, plan_notes),
+         following_plan = COALESCE($14, following_plan),
+         emotional_state = COALESCE($15, emotional_state),
+         notes = COALESCE($16, notes),
+         gallery_images = COALESCE($17, gallery_images),
+         pnl_percentage = COALESCE($18, pnl_percentage),
+         symbol = COALESCE($27, symbol),
+         direction = COALESCE($28, direction),
+         pnl = COALESCE($29, pnl),
+         created_at = COALESCE($30, created_at),
+         updated_at = NOW()
+       WHERE id = $31 RETURNING *`,
       [
         title || null,
         content || null,
@@ -353,13 +372,13 @@ router.put('/:id', async (req, res) => {
         tags ? JSON.stringify(tags) : null,
         isPrivate,
         normalizedImageUrl,
-        imageFilename,
+        imageFilename || null,
         normalizedExecutionTfImageUrl,
-        executionTfImageFilename,
+        executionTfImageFilename || null,
         accountId || null,
-        reasonMindset,
-        isPlanCompliant,
-        planNotes,
+        reasonMindset || null,
+        isPlanCompliant != null ? Boolean(isPlanCompliant) : null,
+        planNotes || null,
         followingPlan != null ? followingPlan : null,
         emotionalState || null,
         notes || null,
@@ -367,25 +386,22 @@ router.put('/:id', async (req, res) => {
         pnlPercentage != null ? Number(pnlPercentage) : null,
         clearImage === true,
         clearExecutionTfImage === true,
+        normalizedBeforeImageUrl,
+        beforeImageFilename || null,
+        clearBeforeImage === true,
+        normalizedAfterImageUrl,
+        afterImageFilename || null,
+        clearAfterImage === true,
         symbol || null,
         direction || null,
         pnl != null ? Number(pnl) : null,
         normalizedCreatedAt,
-        id
+        id,
       ]
     );
 
     const updatedEntry = normalizeEntryImages(result.rows[0]);
-
-    res.json({
-      message: 'Journal entry updated successfully',
-      entry: {
-        ...updatedEntry,
-        tags: updatedEntry.tags || [],
-        is_private: Boolean(updatedEntry.is_private)
-      }
-    });
-
+    res.json({ message: 'Journal entry updated successfully', entry: { ...updatedEntry, tags: updatedEntry.tags || [], is_private: Boolean(updatedEntry.is_private) } });
   } catch (error) {
     console.error('Update entry error:', error);
     res.status(500).json({ error: 'Failed to update entry' });
